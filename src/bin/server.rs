@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use cubehead::{Head, AsyncBufferedReceiver, ReadState};
+use cubehead::{AsyncBufferedReceiver, Head, ReadState};
 
 fn main() -> io::Result<()> {
     let mut args = std::env::args().skip(1);
@@ -41,6 +41,8 @@ struct Connection {
 fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
     let mut conns: Vec<Connection> = vec![];
 
+    let mut wait_time = 1;
+
     loop {
         // Check for new connections
         for (stream, addr) in conn_rx.try_iter() {
@@ -56,6 +58,8 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
 
         let mut live_conns = vec![];
 
+        let mut any_update = false;
+
         // Update head positions
         for mut conn in conns.drain(..) {
             match conn.msg_buf.read(&mut conn.stream)? {
@@ -66,6 +70,7 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
                     let new_head = bincode::deserialize(&buf).expect("Malformed message");
                     conn.last_pos = new_head;
                     live_conns.push(conn);
+                    any_update = true;
                 }
                 ReadState::Invalid | ReadState::Incomplete => {
                     live_conns.push(conn);
@@ -75,18 +80,23 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
 
         conns = live_conns;
 
-        // Compile head position message
-        let heads: Vec<Head> = conns.iter().map(|c| c.last_pos).collect();
-        let msg = bincode::serialize(&heads).unwrap();
+        if any_update {
+            // Compile head position message
+            let heads: Vec<Head> = conns.iter().map(|c| c.last_pos).collect();
+            let header = (bincode::serialized_size(&heads).unwrap() as u32).to_le_bytes();
+            let mut msg = header.to_vec();
+            bincode::serialize_into(&mut msg, &heads).unwrap();
 
-        for conn in &mut conns {
-            // TODO: Exclude the user's own head! Lmao
-            let header = (msg.len() as u32).to_le_bytes();
-            conn.stream.write_all(&header)?;
-            conn.stream.write_all(&msg)?;
+            for conn in &mut conns {
+                // TODO: Exclude the user's own head! Lmao
+                match conn.stream.write_all(&msg) {
+                    Ok(_) => (),
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => (),
+                    Err(e) => Err(e)?,
+                }
+            }
+        } else {
+            std::thread::sleep(Duration::from_millis(wait_time));
         }
-
-        // Don't spin _too_ fast
-        //std::thread::sleep(Duration::from_millis(1));
     }
 }
