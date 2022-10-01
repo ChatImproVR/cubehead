@@ -1,8 +1,10 @@
 extern crate glow as gl;
 extern crate openxr as xr;
 
+use cubehead::Head;
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
 use xr::opengl::SessionCreateInfo;
+use winit_input_helper::WinitInputHelper;
 
 use anyhow::{bail, format_err, Result};
 use gl::HasContext;
@@ -12,7 +14,12 @@ use nalgebra::{Matrix4, Point3, Quaternion, Unit, UnitQuaternion, Vector3};
 mod desktop_camera;
 use desktop_camera::Camera;
 
-use crate::shapes::{big_quad_map, rgb_cube};
+use crate::{
+    desktop_camera::Perspective,
+    flycam::FlyCam,
+    shapes::{big_quad_map, rgb_cube},
+};
+mod flycam;
 mod render;
 mod shapes;
 
@@ -54,7 +61,10 @@ unsafe fn desktop_main() -> Result<()> {
     use glutin::event::{Event, WindowEvent};
     use glutin::event_loop::ControlFlow;
 
-    let mut camera = Camera::default();
+    let mut wih = WinitInputHelper::new();
+    let mut camera = FlyCam::new(Point3::new(0., 4., 0.));
+    let perspective_cfg = Perspective::default();
+
     let mut engine = render::Engine::new(&gl, &big_quad_map(10.), &rgb_cube(0.25))
         .map_err(|e| format_err!("Render engine failed to start; {}", e))?;
 
@@ -63,6 +73,10 @@ unsafe fn desktop_main() -> Result<()> {
     let mut time = std::time::Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
+        if wih.update(&event) {
+            camera.update(&wih, 0.05, 1e-3);
+        }
+
         *control_flow = ControlFlow::Poll;
         match event {
             Event::LoopDestroyed => {
@@ -72,9 +86,6 @@ unsafe fn desktop_main() -> Result<()> {
                 glutin_ctx.window().request_redraw();
             }
             Event::RedrawRequested(_) => {
-                let proj =
-                    camera.projection(physical_size.width as f32, physical_size.height as f32);
-
                 let j = 500;
                 let heads: Vec<[[f32; 4]; 4]> = (0..j)
                     .map(|i| {
@@ -97,14 +108,16 @@ unsafe fn desktop_main() -> Result<()> {
 
                 engine.update_heads(&gl, &heads);
 
+                let proj =
+                    perspective_cfg.matrix(physical_size.width as f32, physical_size.height as f32);
+
                 engine
-                    .frame(&gl, proj, camera.view())
+                    .frame(&gl, proj, view_from_head(&camera.head()))
                     .expect("Engine error");
 
                 glutin_ctx.swap_buffers().unwrap();
             }
             Event::WindowEvent { ref event, .. } => {
-                camera.handle_events(event);
                 match event {
                     WindowEvent::Resized(ph) => {
                         gl.scissor(0, 0, ph.width as i32, ph.height as i32);
@@ -457,25 +470,7 @@ fn compile_glsl_program(gl: &gl::Context, sources: &[(u32, &str)]) -> Result<gl:
 
 /// Creates a view matrix for the given pose
 pub fn view_from_pose(pose: &xr::Posef) -> Matrix4<f32> {
-    // Convert the rotation quaternion from OpenXR to nalgebra
-    let quat = pose.orientation;
-    let quat = Quaternion::new(quat.w, quat.x, quat.y, quat.z);
-    let quat = Unit::try_new(quat, 0.0).expect("Not a unit quaternion");
-
-    // Invert this quaternion, orienting the world into NDC space
-    let quat_inv = quat.inverse();
-
-    // Represent the rotation in homogeneous coordinates
-    let rotation = quat_inv.to_homogeneous();
-
-    // Convert the position vector from OpenXR to nalgebra
-    let pos = pose.position;
-    let pos = Vector3::new(pos.x, pos.y, pos.z);
-
-    // Invert this translation, translating the world into NDC space
-    let trans = Matrix4::new_translation(&-pos);
-
-    rotation * trans
+    view_from_head(&head_from_xr_pose(pose))
 }
 
 /// Creates a projection matrix for the given fov
@@ -504,4 +499,32 @@ pub fn projection_from_fov(fov: &xr::Fovf, near: f32, far: f32) -> Matrix4<f32> 
         0.0, 0.0, a33, a43, //
         0.0, 0.0, -1.0, 0.0, //
     )
+}
+
+/// Creates a view matrix for the given pose
+pub fn head_from_xr_pose(pose: &xr::Posef) -> Head {
+    // Convert the rotation quaternion from OpenXR to nalgebra
+    let orient = pose.orientation;
+    let orient = Quaternion::new(orient.w, orient.x, orient.y, orient.z);
+    let orient = Unit::try_new(orient, 0.0).expect("Not a unit orienternion");
+
+    // Convert the position vector from OpenXR to nalgebra
+    let pos = pose.position;
+    let pos = Point3::new(pos.x, pos.y, pos.z);
+
+    Head { pos, orient }
+}
+
+/// Creates a view matrix for the given head pose
+pub fn view_from_head(head: &Head) -> Matrix4<f32> {
+    // Invert this quaternion, orienting the world into NDC space
+    let orient_inv = head.orient.inverse();
+
+    // Represent the rotation in homogeneous coordinates
+    let rotation = orient_inv.to_homogeneous();
+
+    // Invert this translation, translating the world into NDC space
+    let trans = Matrix4::new_translation(&-head.pos.coords);
+
+    rotation * trans
 }
