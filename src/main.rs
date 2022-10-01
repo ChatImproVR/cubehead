@@ -74,7 +74,7 @@ unsafe fn desktop_main() -> Result<()> {
 
     event_loop.run(move |event, _, control_flow| {
         if wih.update(&event) {
-            camera.update(&wih, 0.05, 1e-3);
+            camera.update(&wih, 0.05, 2e-3);
         }
 
         *control_flow = ControlFlow::Poll;

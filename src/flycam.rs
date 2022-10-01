@@ -1,3 +1,4 @@
+use bytemuck::__core::f32::consts::FRAC_PI_2;
 use cubehead::Head;
 use glutin::{
     dpi::PhysicalPosition,
@@ -26,11 +27,26 @@ impl FlyCam {
         if wih.mouse_held(0) {
             let (x_delta, y_delta) = wih.mouse_diff();
             self.yaw += x_delta * sensitivity;
-            self.pitch = (self.pitch + y_delta * sensitivity).clamp(-PI, PI);
+            self.pitch = (self.pitch + y_delta * sensitivity).clamp(-FRAC_PI_2, FRAC_PI_2);
         }
 
+        let head = self.head();
+        let tf_vect = |v| head.orient.transform_vector(&v);
+
         if wih.key_held(VirtualKeyCode::W) {
-            self.pos += self.head().orient.transform_vector(&-Vector3::z()) * speed;
+            self.pos += tf_vect(-Vector3::z()) * speed;
+        }
+
+        if wih.key_held(VirtualKeyCode::S) {
+            self.pos += tf_vect(Vector3::z()) * speed;
+        }
+
+        if wih.key_held(VirtualKeyCode::A) {
+            self.pos += tf_vect(-Vector3::x()) * speed;
+        }
+
+        if wih.key_held(VirtualKeyCode::D) {
+            self.pos += tf_vect(Vector3::x()) * speed;
         }
     }
 
