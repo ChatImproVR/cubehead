@@ -26,13 +26,16 @@ const MAX_HEADS: usize = 500;
 
 /// Rendering engine state
 pub struct Engine {
+    // NOTE: We do not call destructors!
     map: GpuMesh,
     head: GpuMesh,
 
     //heads_vao: gl::NativeBuffer,
     //heads_vbo: gl::NativeBuffer,
     //heads_matrices: Vec<Matrix4<f32>>,
-    shader: gl::Program,
+
+    map_shader: gl::Program,
+    head_shader: gl::Program,
 }
 
 struct GpuMesh {
@@ -53,18 +56,32 @@ impl Engine {
             gl.depth_func(gl::LESS);
 
             // Compile shaders
-            let shader = compile_glsl_program(
+            let map_shader = compile_glsl_program(
                 &gl,
                 &[
-                    (gl::VERTEX_SHADER, VERTEX_SHADER_SOURCE),
-                    (gl::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE),
+                    (gl::VERTEX_SHADER, include_str!("shaders/map.vert")),
+                    (gl::FRAGMENT_SHADER, include_str!("shaders/unlit.frag")),
+                ],
+            )?;
+
+            // Compile shaders
+            let head_shader = compile_glsl_program(
+                &gl,
+                &[
+                    (gl::VERTEX_SHADER, include_str!("shaders/head.vert")),
+                    (gl::FRAGMENT_SHADER, include_str!("shaders/unlit.frag")),
                 ],
             )?;
 
             let head = upload_mesh(gl, gl::STATIC_DRAW, head_mesh)?;
             let map = upload_mesh(gl, gl::STATIC_DRAW, map_mesh)?;
 
-            Ok(Self { head, map, shader })
+            Ok(Self {
+                head,
+                map,
+                map_shader,
+                head_shader,
+            })
         }
     }
 
@@ -85,17 +102,17 @@ impl Engine {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
             // Use shader
-            gl.use_program(Some(self.shader));
+            gl.use_program(Some(self.map_shader));
 
             // Set camera matrix
             gl.uniform_matrix_4_f32_slice(
-                gl.get_uniform_location(self.shader, "view").as_ref(),
+                gl.get_uniform_location(self.map_shader, "view").as_ref(),
                 false,
                 view.as_slice(),
             );
 
             gl.uniform_matrix_4_f32_slice(
-                gl.get_uniform_location(self.shader, "proj").as_ref(),
+                gl.get_uniform_location(self.map_shader, "proj").as_ref(),
                 false,
                 proj.as_slice(),
             );
@@ -127,36 +144,6 @@ pub fn view_from_head(head: &Head) -> Matrix4<f32> {
     // Compose the view
     rotation * translation
 }
-
-const VERTEX_SHADER_SOURCE: &str = r#"
-    #version 450
-
-    uniform mat4 view;
-    uniform mat4 proj;
-
-    in vec3 v_pos;
-    in vec3 v_color;
-
-    out vec4 f_color;
-
-    void main() {
-        gl_Position = proj * view * vec4(v_pos, 1.0);
-        f_color = vec4(v_color, 1.);
-    }
-"#;
-
-const FRAGMENT_SHADER_SOURCE: &str = r#"
-    #version 450
-    precision mediump float;
-
-    in vec4 f_color;
-
-    out vec4 out_color;
-
-    void main() {
-        out_color = f_color;
-    }
-"#;
 
 /// Compiles (*_SHADER, <source>) into a shader program for OpenGL
 fn compile_glsl_program(gl: &gl::Context, sources: &[(u32, &str)]) -> Result<gl::Program, String> {

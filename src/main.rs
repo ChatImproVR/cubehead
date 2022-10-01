@@ -31,37 +31,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-const VERTEX_SHADER_SOURCE: &str = r#"
-    #version 450
-    uniform mat4 view;
-    uniform mat4 proj;
-
-    const vec2 verts[3] = vec2[3](
-        vec2(0.5f, 1.0f),
-        vec2(0.0f, 0.0f),
-        vec2(1.0f, 0.0f)
-    );
-
-    out vec2 vert;
-    void main() {
-        vert = verts[gl_VertexID];
-        gl_Position = proj * view * vec4(vert - 0.5, -1.0, 1.0);
-    }
-"#;
-
-const FRAGMENT_SHADER_SOURCE: &str = r#"
-    #version 450
-
-    precision mediump float;
-
-    in vec2 vert;
-    out vec4 color;
-
-    void main() {
-        color = vec4(vert, 0.5, 1.0);
-    }
-"#;
-
 unsafe fn desktop_main() -> Result<()> {
     let event_loop = glutin::event_loop::EventLoop::new();
     let window_builder = glutin::window::WindowBuilder::new()
@@ -80,14 +49,6 @@ unsafe fn desktop_main() -> Result<()> {
         .create_vertex_array()
         .expect("Cannot create vertex array");
     gl.bind_vertex_array(Some(vertex_array));
-
-    let program = compile_glsl_program(
-        &gl,
-        &[
-            (gl::VERTEX_SHADER, VERTEX_SHADER_SOURCE),
-            (gl::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE),
-        ],
-    )?;
 
     // We handle events differently between targets
     use glutin::event::{Event, WindowEvent};
@@ -126,8 +87,6 @@ unsafe fn desktop_main() -> Result<()> {
                         glutin_ctx.resize(*ph);
                     }
                     WindowEvent::CloseRequested => {
-                        gl.delete_program(program);
-                        gl.delete_vertex_array(vertex_array);
                         *control_flow = ControlFlow::Exit
                     }
                     _ => (),
@@ -269,13 +228,13 @@ unsafe fn vr_main() -> Result<()> {
     }
 
     // Compile shaders
-    let gl_program = compile_glsl_program(
+    let gl_program = todo!();/*compile_glsl_program(
         &gl,
         &[
             (gl::VERTEX_SHADER, VERTEX_SHADER_SOURCE),
             (gl::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE),
         ],
-    )?;
+    )?;*/
 
     let xr_play_space =
         xr_session.create_reference_space(xr::ReferenceSpaceType::LOCAL, xr::Posef::IDENTITY)?;
