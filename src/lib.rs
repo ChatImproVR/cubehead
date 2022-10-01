@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// The position and orientation of a user's head
 /// User's head points in the negative Z direction (following OpenGL NDC)
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Head {
     /// Position
     pub pos: Point3<f32>,

@@ -42,8 +42,8 @@ pub struct Engine {
 
 struct GpuMesh {
     vao: gl::VertexArray,
-    vbo: gl::NativeBuffer,
-    ebo: gl::NativeBuffer,
+    _vbo: gl::NativeBuffer,
+    _ebo: gl::NativeBuffer,
     index_count: i32,
 }
 
@@ -309,8 +309,8 @@ fn upload_mesh(gl: &gl::Context, usage: u32, mesh: &Mesh) -> Result<GpuMesh, Str
 
         Ok(GpuMesh {
             vao,
-            vbo,
-            ebo,
+            _vbo: vbo,
+            _ebo: ebo,
             index_count: mesh.indices.len() as i32,
         })
     }
