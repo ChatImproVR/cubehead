@@ -3,8 +3,8 @@ extern crate openxr as xr;
 
 use cubehead::Head;
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
-use xr::opengl::SessionCreateInfo;
 use winit_input_helper::WinitInputHelper;
+use xr::opengl::SessionCreateInfo;
 
 use anyhow::{bail, format_err, Result};
 use gl::HasContext;
@@ -52,11 +52,6 @@ unsafe fn desktop_main() -> Result<()> {
 
     let gl = gl::Context::from_loader_function(|s| glutin_ctx.get_proc_address(s) as *const _);
 
-    let vertex_array = gl
-        .create_vertex_array()
-        .expect("Cannot create vertex array");
-    gl.bind_vertex_array(Some(vertex_array));
-
     // We handle events differently between targets
     use glutin::event::{Event, WindowEvent};
     use glutin::event_loop::ControlFlow;
@@ -68,13 +63,20 @@ unsafe fn desktop_main() -> Result<()> {
     let mut engine = render::Engine::new(&gl, &big_quad_map(10.), &rgb_cube(0.25))
         .map_err(|e| format_err!("Render engine failed to start; {}", e))?;
 
-    let mut physical_size = PhysicalSize::new(0, 0);
+    let time = std::time::Instant::now();
 
-    let mut time = std::time::Instant::now();
+    let mut proj = perspective_cfg.matrix(0., 0.);
 
     event_loop.run(move |event, _, control_flow| {
         if wih.update(&event) {
             camera.update(&wih, 0.05, 2e-3);
+        }
+
+        if let Some(ph) = wih.window_resized() {
+            glutin_ctx.resize(ph);
+            gl.scissor(0, 0, ph.width as i32, ph.height as i32);
+            gl.viewport(0, 0, ph.width as i32, ph.height as i32);
+            proj = perspective_cfg.matrix(ph.width as f32, ph.height as f32);
         }
 
         *control_flow = ControlFlow::Poll;
@@ -108,27 +110,16 @@ unsafe fn desktop_main() -> Result<()> {
 
                 engine.update_heads(&gl, &heads);
 
-                let proj =
-                    perspective_cfg.matrix(physical_size.width as f32, physical_size.height as f32);
-
                 engine
                     .frame(&gl, proj, view_from_head(&camera.head()))
                     .expect("Engine error");
 
                 glutin_ctx.swap_buffers().unwrap();
             }
-            Event::WindowEvent { ref event, .. } => {
-                match event {
-                    WindowEvent::Resized(ph) => {
-                        gl.scissor(0, 0, ph.width as i32, ph.height as i32);
-                        gl.viewport(0, 0, ph.width as i32, ph.height as i32);
-                        physical_size = *ph;
-                        glutin_ctx.resize(*ph);
-                    }
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    _ => (),
-                }
-            }
+            Event::WindowEvent { ref event, .. } => match event {
+                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                _ => (),
+            },
             _ => (),
         }
     });

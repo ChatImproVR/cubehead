@@ -31,22 +31,22 @@ impl FlyCam {
         }
 
         let head = self.head();
-        let tf_vect = |v| head.orient.transform_vector(&v);
+        let tf_vect = |v| head.orient.transform_vector(&v) * speed;
 
         if wih.key_held(VirtualKeyCode::W) {
-            self.pos += tf_vect(-Vector3::z()) * speed;
+            self.pos += tf_vect(-Vector3::z());
         }
 
         if wih.key_held(VirtualKeyCode::S) {
-            self.pos += tf_vect(Vector3::z()) * speed;
+            self.pos += tf_vect(Vector3::z());
         }
 
         if wih.key_held(VirtualKeyCode::A) {
-            self.pos += tf_vect(-Vector3::x()) * speed;
+            self.pos += tf_vect(-Vector3::x());
         }
 
         if wih.key_held(VirtualKeyCode::D) {
-            self.pos += tf_vect(Vector3::x()) * speed;
+            self.pos += tf_vect(Vector3::x());
         }
     }
 
