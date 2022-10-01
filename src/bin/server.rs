@@ -1,12 +1,11 @@
 use std::{
-    io::{self, Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
-    num::NonZeroUsize,
+    io::{self, Write},
+    net::{SocketAddr, TcpListener, TcpStream},
     sync::mpsc::{self, Receiver, Sender},
     time::Duration,
 };
 
-use cubehead::Head;
+use cubehead::{Head, AsyncBufferedReceiver, ReadState};
 
 fn main() -> io::Result<()> {
     let mut args = std::env::args().skip(1);
@@ -57,15 +56,15 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
 
         let mut live_conns = vec![];
 
+        // Update head positions
         for mut conn in conns.drain(..) {
             match conn.msg_buf.read(&mut conn.stream)? {
                 ReadState::Disconnected => {
                     eprintln!("{} Disconnected", conn.addr);
                 }
                 ReadState::Complete(buf) => {
-                    let mut stdout = std::io::stdout().lock();
-                    stdout.write(&buf).unwrap();
-                    stdout.flush().unwrap();
+                    let new_head = bincode::deserialize(&buf).expect("Malformed message");
+                    conn.last_pos = new_head;
                     live_conns.push(conn);
                 }
                 ReadState::Invalid | ReadState::Incomplete => {
@@ -76,81 +75,18 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
 
         conns = live_conns;
 
+        // Compile head position message
+        let heads: Vec<Head> = conns.iter().map(|c| c.last_pos).collect();
+        let msg = bincode::serialize(&heads).unwrap();
+
+        for conn in &mut conns {
+            // TODO: Exclude the user's own head! Lmao
+            let header = (msg.len() as u32).to_le_bytes();
+            conn.stream.write_all(&header)?;
+            conn.stream.write_all(&msg)?;
+        }
+
         // Don't spin _too_ fast
-        std::thread::sleep(Duration::from_millis(1));
-    }
-}
-
-/// Facilitates reading a little-endian length header, and then a message body over a reliable,
-/// asynchronous stream
-struct AsyncBufferedReceiver {
-    buf: Vec<u8>,
-    /// Current position within the buffer
-    buf_pos: usize,
-}
-
-enum ReadState {
-    /// The peer hung up
-    Disconnected,
-    /// Message incomplete, but the connection is still live
-    Incomplete,
-    /// Message is complete
-    Complete(Vec<u8>),
-    /// Invalid message, report error and try again
-    Invalid,
-}
-
-impl AsyncBufferedReceiver {
-    pub fn new() -> Self {
-        Self {
-            buf: vec![],
-            buf_pos: 0,
-        }
-    }
-
-    /// Read from the given stream without blocking, returning a complete message if any.
-    pub fn read<R: Read>(&mut self, mut r: R) -> io::Result<ReadState> {
-        // Try to receive a new message if we are not currently processing one
-        if self.buf.is_empty() {
-            let mut buf = [0u8; 4];
-            match r.read(&mut buf) {
-                Ok(n_bytes) => {
-                    if n_bytes == 0 {
-                        return Ok(ReadState::Disconnected);
-                    } else if n_bytes == 4 {
-                        // Set a new buffer size
-                        let msg_size = u32::from_le_bytes(buf);
-                        self.buf = vec![0; msg_size as usize];
-                        self.buf_pos = 0;
-                    } else {
-                        return Ok(ReadState::Invalid);
-                    }
-                }
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    return Ok(ReadState::Incomplete);
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-            };
-        }
-
-        // Attempt to complete the current message
-        match r.read(&mut self.buf[self.buf_pos..]) {
-            Ok(n_bytes) => {
-                if n_bytes == 0 {
-                    Ok(ReadState::Disconnected)
-                } else {
-                    self.buf_pos += n_bytes;
-                    if self.buf_pos == self.buf.len() {
-                        Ok(ReadState::Complete(std::mem::take(&mut self.buf)))
-                    } else {
-                        Ok(ReadState::Incomplete)
-                    }
-                }
-            }
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => Ok(ReadState::Incomplete),
-            Err(e) => Err(e),
-        }
+        //std::thread::sleep(Duration::from_millis(1));
     }
 }

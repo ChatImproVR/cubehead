@@ -1,6 +1,8 @@
 extern crate glow as gl;
 extern crate openxr as xr;
 
+use std::net::{SocketAddr, TcpStream};
+
 use cubehead::Head;
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
 use winit_input_helper::WinitInputHelper;
@@ -25,7 +27,7 @@ mod shapes;
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
-    let use_vr = args.next().is_some();
+    let use_vr = false;//args.next().is_some();
 
     unsafe {
         if use_vr {
@@ -39,6 +41,11 @@ fn main() -> Result<()> {
 }
 
 unsafe fn desktop_main() -> Result<()> {
+    let mut args = std::env::args().skip(1);
+    let addr: SocketAddr = args.next().expect("Requires addr").parse().unwrap();
+    let mut tcp_stream = TcpStream::connect(addr)?;
+    tcp_stream.set_nonblocking(true)?;
+
     let event_loop = glutin::event_loop::EventLoop::new();
     let window_builder = glutin::window::WindowBuilder::new()
         .with_title("Hello triangle!")
@@ -63,13 +70,22 @@ unsafe fn desktop_main() -> Result<()> {
     let mut engine = render::Engine::new(&gl, &big_quad_map(10.), &rgb_cube(0.25))
         .map_err(|e| format_err!("Render engine failed to start; {}", e))?;
 
-    let time = std::time::Instant::now();
-
     let mut proj = perspective_cfg.matrix(0., 0.);
+
+    let mut msg_buf = cubehead::AsyncBufferedReceiver::new();
+
+    let mut heads: Vec<Head> = vec![];
 
     event_loop.run(move |event, _, control_flow| {
         if wih.update(&event) {
             camera.update(&wih, 0.05, 2e-3);
+            // Send head position to server
+            cubehead::serialize_msg(&camera.head(), &mut tcp_stream).unwrap();
+        }
+
+        // Receive head positions of all players
+        if let cubehead::ReadState::Complete(msg) = msg_buf.read(&mut tcp_stream).unwrap() {
+            heads = bincode::deserialize(&msg).unwrap();
         }
 
         if let Some(ph) = wih.window_resized() {
@@ -88,27 +104,10 @@ unsafe fn desktop_main() -> Result<()> {
                 glutin_ctx.window().request_redraw();
             }
             Event::RedrawRequested(_) => {
-                let j = 500;
-                let heads: Vec<[[f32; 4]; 4]> = (0..j)
-                    .map(|i| {
-                        let u = (i as f32 / j as f32) * 2. - 1.;
+                let head_matrices: Vec<[[f32; 4]; 4]> =
+                    heads.iter().map(|head| *head.matrix().as_ref()).collect();
 
-                        let t = time.elapsed().as_secs_f32();
-
-                        let f = u * std::f32::consts::PI * 8.;
-
-                        let v = Vector3::new(2. / j as f32, -f.sin(), f.cos());
-                        let v = Unit::new_normalize(v);
-
-                        cubehead::Head {
-                            orient: UnitQuaternion::from_axis_angle(&v, t),
-                            pos: Point3::new(u * 8., f.cos(), f.sin()),
-                        }
-                    })
-                    .map(|head| *head.matrix().as_ref())
-                    .collect();
-
-                engine.update_heads(&gl, &heads);
+                engine.update_heads(&gl, &head_matrices);
 
                 engine
                     .frame(&gl, proj, view_from_head(&camera.head()))
