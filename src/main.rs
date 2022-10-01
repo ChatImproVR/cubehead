@@ -73,33 +73,22 @@ unsafe fn desktop_main() -> Result<()> {
                 let proj =
                     camera.projection(physical_size.width as f32, physical_size.height as f32);
 
-                /*
-                let j = 100;
-                let heads: Vec<cubehead::Head> = (0..j).map(|i| {
-                    let t = i as f32 / j as f32;
+                let j = 500;
+                let heads: Vec<[[f32; 4]; 4]> = (0..j)
+                    .map(|i| {
+                        let t = (i as f32 / j as f32) * 2. - 1.;
+
                         cubehead::Head {
                             orient: UnitQuaternion::identity(),
-                            pos: dbg!(Point3::new(
+                            pos: Point3::new(
                                 t * 8.,
                                 (t * std::f32::consts::PI * 8.).cos(),
                                 (t * std::f32::consts::PI * 8.).sin(),
-                            )),
+                            ),
                         }
-                }).collect();
-                */
-                let heads: Vec<[[f32; 4]; 4]> = vec![*cubehead::Head {
-                    orient: UnitQuaternion::identity(),
-                    pos: Point3::origin(),
-                }
-                .matrix()
-                .as_ref(),
-                *cubehead::Head {
-                    orient: UnitQuaternion::identity(),
-                    pos: Point3::new(1., 1., 1.),
-                }
-                .matrix()
-                .as_ref()
-                ];
+                    })
+                    .map(|head| *head.matrix().as_ref())
+                    .collect();
 
                 engine.update_heads(&gl, &heads);
 
