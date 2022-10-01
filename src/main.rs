@@ -102,6 +102,8 @@ unsafe fn desktop_main() -> Result<()> {
                 camera.handle_events(event);
                 match event {
                     WindowEvent::Resized(ph) => {
+                        gl.scissor(0, 0, ph.width as i32, ph.height as i32);
+                        gl.viewport(0, 0, ph.width as i32, ph.height as i32);
                         physical_size = *ph;
                         glutin_ctx.resize(*ph);
                     }
