@@ -1,14 +1,14 @@
 use bytemuck::{Pod, Zeroable};
 use cubehead::Head;
 use glow::HasContext;
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Point3, Vector3};
 
 /// Vertex representation used by the rendering engine
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Vertex {
-    pub pos: [f32; 3],
-    pub color: [f32; 3],
+    pub pos: Point3<f32>,
+    pub color: Vector3<f32>,
 }
 
 // Allow Vertex to be cast to bytes using bytemuck
@@ -31,7 +31,7 @@ pub struct Engine {
 
     //heads_vao: gl::NativeBuffer,
     //heads_vbo: gl::NativeBuffer,
-
+    //heads_matrices: Vec<Matrix4<f32>>,
     shader: gl::Program,
 }
 
@@ -64,11 +64,7 @@ impl Engine {
             let head = upload_mesh(gl, gl::STATIC_DRAW, head_mesh)?;
             let map = upload_mesh(gl, gl::STATIC_DRAW, map_mesh)?;
 
-            Ok(Self {
-                head,
-                map,
-                shader,
-            })
+            Ok(Self { head, map, shader })
         }
     }
 
@@ -203,7 +199,10 @@ fn compile_glsl_program(gl: &gl::Context, sources: &[(u32, &str)]) -> Result<gl:
 
 impl Vertex {
     pub fn new(pos: [f32; 3], color: [f32; 3]) -> Self {
-        Self { pos, color }
+        Self {
+            pos: pos.into(),
+            color: color.into(),
+        }
     }
 }
 

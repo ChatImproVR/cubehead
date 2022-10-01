@@ -109,13 +109,11 @@ unsafe fn desktop_main() -> Result<()> {
                 glutin_ctx.window().request_redraw();
             }
             Event::RedrawRequested(_) => {
+                let proj =
+                    camera.projection(physical_size.width as f32, physical_size.height as f32);
+
                 engine
-                    .frame(
-                        &gl,
-                        &[],
-                        camera.projection(physical_size.width as f32, physical_size.height as f32),
-                        camera.view(),
-                    )
+                    .frame(&gl, &[], proj, camera.view())
                     .expect("Engine error");
 
                 glutin_ctx.swap_buffers().unwrap();
