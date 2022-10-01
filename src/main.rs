@@ -7,7 +7,7 @@ use xr::opengl::SessionCreateInfo;
 use anyhow::{bail, format_err, Result};
 use gl::HasContext;
 use glutin::dpi::PhysicalSize;
-use nalgebra::{Matrix4, Quaternion, Unit, Vector3};
+use nalgebra::{Matrix4, Point3, Quaternion, Unit, UnitQuaternion, Vector3};
 
 mod desktop_camera;
 use desktop_camera::Camera;
@@ -55,7 +55,7 @@ unsafe fn desktop_main() -> Result<()> {
     use glutin::event_loop::ControlFlow;
 
     let mut camera = Camera::default();
-    let mut engine = render::Engine::new(&gl, &rgb_cube(0.25), &big_quad_map(10.))
+    let mut engine = render::Engine::new(&gl, &big_quad_map(10.), &rgb_cube(0.25))
         .map_err(|e| format_err!("Render engine failed to start; {}", e))?;
 
     let mut physical_size = PhysicalSize::new(0, 0);
@@ -73,8 +73,38 @@ unsafe fn desktop_main() -> Result<()> {
                 let proj =
                     camera.projection(physical_size.width as f32, physical_size.height as f32);
 
+                /*
+                let j = 100;
+                let heads: Vec<cubehead::Head> = (0..j).map(|i| {
+                    let t = i as f32 / j as f32;
+                        cubehead::Head {
+                            orient: UnitQuaternion::identity(),
+                            pos: dbg!(Point3::new(
+                                t * 8.,
+                                (t * std::f32::consts::PI * 8.).cos(),
+                                (t * std::f32::consts::PI * 8.).sin(),
+                            )),
+                        }
+                }).collect();
+                */
+                let heads: Vec<[[f32; 4]; 4]> = vec![*cubehead::Head {
+                    orient: UnitQuaternion::identity(),
+                    pos: Point3::origin(),
+                }
+                .matrix()
+                .as_ref(),
+                *cubehead::Head {
+                    orient: UnitQuaternion::identity(),
+                    pos: Point3::new(1., 1., 1.),
+                }
+                .matrix()
+                .as_ref()
+                ];
+
+                engine.update_heads(&gl, &heads);
+
                 engine
-                    .frame(&gl, &[], proj, camera.view())
+                    .frame(&gl, proj, camera.view())
                     .expect("Engine error");
 
                 glutin_ctx.swap_buffers().unwrap();
@@ -86,9 +116,7 @@ unsafe fn desktop_main() -> Result<()> {
                         physical_size = *ph;
                         glutin_ctx.resize(*ph);
                     }
-                    WindowEvent::CloseRequested => {
-                        *control_flow = ControlFlow::Exit
-                    }
+                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     _ => (),
                 }
             }
@@ -228,13 +256,13 @@ unsafe fn vr_main() -> Result<()> {
     }
 
     // Compile shaders
-    let gl_program = todo!();/*compile_glsl_program(
-        &gl,
-        &[
-            (gl::VERTEX_SHADER, VERTEX_SHADER_SOURCE),
-            (gl::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE),
-        ],
-    )?;*/
+    let gl_program = todo!(); /*compile_glsl_program(
+                                  &gl,
+                                  &[
+                                      (gl::VERTEX_SHADER, VERTEX_SHADER_SOURCE),
+                                      (gl::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE),
+                                  ],
+                              )?;*/
 
     let xr_play_space =
         xr_session.create_reference_space(xr::ReferenceSpaceType::LOCAL, xr::Posef::IDENTITY)?;

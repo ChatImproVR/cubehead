@@ -1,4 +1,4 @@
-use nalgebra::{Point3, UnitQuaternion};
+use nalgebra::{Matrix4, Point3, UnitQuaternion};
 use serde::{Deserialize, Serialize};
 
 /// The position and orientation of a user's head
@@ -9,4 +9,11 @@ pub struct Head {
     pub pos: Point3<f32>,
     /// Orientation
     pub orient: UnitQuaternion<f32>,
+}
+
+impl Head {
+    pub fn matrix(&self) -> Matrix4<f32> {
+        // TODO: Make this cheaper?
+        Matrix4::new_translation(&self.pos.coords) * self.orient.to_homogeneous()
+    }
 }

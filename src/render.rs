@@ -15,6 +15,9 @@ pub struct Vertex {
 unsafe impl Zeroable for Vertex {}
 unsafe impl Pod for Vertex {}
 
+/// A 4x4 matrix as nested arrays
+type RawMatrix = [[f32; 4]; 4];
+
 /// Mesh representation used by the rendering engine
 pub struct Mesh {
     /// Triangle indices, counter-clockwise winding order is front-facing
@@ -30,9 +33,8 @@ pub struct Engine {
     map: GpuMesh,
     head: GpuMesh,
 
-    //heads_vao: gl::NativeBuffer,
-    //heads_vbo: gl::NativeBuffer,
-    //heads_matrices: Vec<Matrix4<f32>>,
+    head_inst_vbo: gl::NativeBuffer,
+    head_count: usize,
 
     map_shader: gl::Program,
     head_shader: gl::Program,
@@ -73,10 +75,44 @@ impl Engine {
                 ],
             )?;
 
+            // Upload head mesh
             let head = upload_mesh(gl, gl::STATIC_DRAW, head_mesh)?;
-            let map = upload_mesh(gl, gl::STATIC_DRAW, map_mesh)?;
+
+            // Upload map mesh
+            let map = upload_mesh(gl, gl::DYNAMIC_DRAW, map_mesh)?;
+
+            // Create head instance buffer
+            gl.bind_vertex_array(Some(head.vao));
+            let head_inst_vbo = gl.create_buffer()?;
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(head_inst_vbo));
+            gl.buffer_data_size(
+                gl::ARRAY_BUFFER,
+                (std::mem::size_of::<RawMatrix>() * MAX_HEADS) as i32,
+                gl::DYNAMIC_DRAW,
+            );
+            gl.bind_buffer(gl::ARRAY_BUFFER, None);
+
+            // Set up instance buffer
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(head_inst_vbo));
+            for i in 0..4 {
+                let attrib_idx = 2 + i;
+                gl.enable_vertex_attrib_array(attrib_idx);
+                gl.vertex_attrib_pointer_f32(
+                    attrib_idx,
+                    4,
+                    gl::FLOAT,
+                    false,
+                    std::mem::size_of::<RawMatrix>() as i32,
+                    i as i32 * std::mem::size_of::<[f32; 4]>() as i32,
+                );
+                gl.vertex_attrib_divisor(attrib_idx, 1);
+            }
+            gl.bind_buffer(gl::ARRAY_BUFFER, None);
+            gl.bind_vertex_array(None);
 
             Ok(Self {
+                head_inst_vbo,
+                head_count: 0,
                 head,
                 map,
                 map_shader,
@@ -85,12 +121,22 @@ impl Engine {
         }
     }
 
+    /// Update head positions  
+    pub fn update_heads(&mut self, gl: &gl::Context, heads: &[RawMatrix]) {
+        assert!(heads.len() <= MAX_HEADS);
+        unsafe {
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(self.head_inst_vbo));
+            gl.buffer_sub_data_u8_slice(gl::ARRAY_BUFFER, 0, bytemuck::cast_slice(heads));
+            gl.bind_buffer(gl::ARRAY_BUFFER, None);
+            self.head_count = heads.len();
+        }
+    }
+
     /// The given heads will be rendered using the provided projection matrix and view Head
     /// position
     pub fn frame(
         &mut self,
         gl: &gl::Context,
-        heads: &[Head],
         proj: Matrix4<f32>,
         view: Matrix4<f32>,
         //view: Head,
@@ -101,30 +147,41 @@ impl Engine {
             gl.clear_depth_f32(1.);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-            // Use shader
-            gl.use_program(Some(self.map_shader));
+            let set_camera_uniforms = |shader| {
+                // Set camera matrix
+                gl.uniform_matrix_4_f32_slice(
+                    gl.get_uniform_location(shader, "view").as_ref(),
+                    false,
+                    view.as_slice(),
+                );
 
-            // Set camera matrix
-            gl.uniform_matrix_4_f32_slice(
-                gl.get_uniform_location(self.map_shader, "view").as_ref(),
-                false,
-                view.as_slice(),
-            );
-
-            gl.uniform_matrix_4_f32_slice(
-                gl.get_uniform_location(self.map_shader, "proj").as_ref(),
-                false,
-                proj.as_slice(),
-            );
+                gl.uniform_matrix_4_f32_slice(
+                    gl.get_uniform_location(shader, "proj").as_ref(),
+                    false,
+                    proj.as_slice(),
+                );
+            };
 
             // Draw map
+            gl.use_program(Some(self.map_shader));
+            set_camera_uniforms(self.map_shader);
+
             gl.bind_vertex_array(Some(self.map.vao));
             gl.draw_elements(gl::TRIANGLES, self.map.index_count, gl::UNSIGNED_INT, 0);
             gl.bind_vertex_array(None);
 
-            // Draw head
+            // Draw heads
+            gl.use_program(Some(self.head_shader));
+            set_camera_uniforms(self.head_shader);
+
             gl.bind_vertex_array(Some(self.head.vao));
-            gl.draw_elements(gl::TRIANGLES, self.head.index_count, gl::UNSIGNED_INT, 0);
+            gl.draw_elements_instanced(
+                gl::TRIANGLES,
+                self.head.index_count,
+                gl::UNSIGNED_INT,
+                0,
+                self.head_count as i32,
+            );
             gl.bind_vertex_array(None);
 
             Ok(())
@@ -218,6 +275,7 @@ fn set_vertex_attrib(gl: &gl::Context) {
     }
 }
 
+/// Uploads a mesh; does not unbind vertex array
 fn upload_mesh(gl: &gl::Context, usage: u32, mesh: &Mesh) -> Result<GpuMesh, String> {
     unsafe {
         // Map buffer
