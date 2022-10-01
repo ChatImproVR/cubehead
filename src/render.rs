@@ -22,19 +22,36 @@ pub struct Mesh {
     pub vertices: Vec<Vertex>,
 }
 
+const MAX_HEADS: usize = 500;
+
 /// Rendering engine state
 pub struct Engine {
-    map_vao: gl::VertexArray,
-    _map_vbo: gl::NativeBuffer,
-    _map_ebo: gl::NativeBuffer,
-    map_index_count: i32,
+    map: GpuMesh,
+    head: GpuMesh,
+
+    //heads_vao: gl::NativeBuffer,
+    //heads_vbo: gl::NativeBuffer,
 
     shader: gl::Program,
 }
 
+struct GpuMesh {
+    vao: gl::VertexArray,
+    vbo: gl::NativeBuffer,
+    ebo: gl::NativeBuffer,
+    index_count: i32,
+}
+
 impl Engine {
-    pub fn new(gl: &gl::Context, map_mesh: &Mesh, _head_mesh: &Mesh) -> Result<Self, String> {
+    pub fn new(gl: &gl::Context, map_mesh: &Mesh, head_mesh: &Mesh) -> Result<Self, String> {
         unsafe {
+            // Enable backface culling
+            gl.enable(gl::CULL_FACE);
+
+            // Enable depth buffering
+            gl.enable(gl::DEPTH_TEST);
+            gl.depth_func(gl::LESS);
+
             // Compile shaders
             let shader = compile_glsl_program(
                 &gl,
@@ -44,62 +61,12 @@ impl Engine {
                 ],
             )?;
 
-            // Map buffer
-            let map_vao = gl.create_vertex_array()?;
-            let map_vbo = gl.create_buffer()?;
-            let map_ebo = gl.create_buffer()?;
-
-            gl.bind_vertex_array(Some(map_vao));
-
-            // Write vertices
-            gl.bind_buffer(gl::ARRAY_BUFFER, Some(map_vbo));
-            gl.buffer_data_u8_slice(
-                gl::ARRAY_BUFFER,
-                bytemuck::cast_slice(&map_mesh.vertices),
-                gl::STATIC_DRAW,
-            );
-
-            // Write vertices
-            gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(map_ebo));
-            gl.buffer_data_u8_slice(
-                gl::ELEMENT_ARRAY_BUFFER,
-                bytemuck::cast_slice(&map_mesh.indices),
-                gl::STATIC_DRAW,
-            );
-
-            // Set vertex attributes
-            gl.enable_vertex_attrib_array(0);
-            gl.vertex_attrib_pointer_f32(
-                0,
-                3,
-                gl::FLOAT,
-                false,
-                std::mem::size_of::<Vertex>() as i32,
-                0,
-            );
-
-            gl.enable_vertex_attrib_array(1);
-            gl.vertex_attrib_pointer_f32(
-                1,
-                3,
-                gl::FLOAT,
-                false,
-                std::mem::size_of::<Vertex>() as i32,
-                3 * std::mem::size_of::<f32>() as i32,
-            );
-
-            gl.bind_vertex_array(None);
-
-            // Enable backface culling
-            gl.enable(gl::CULL_FACE);
-
-            let map_index_count = map_mesh.indices.len() as i32;
+            let head = upload_mesh(gl, gl::STATIC_DRAW, head_mesh)?;
+            let map = upload_mesh(gl, gl::STATIC_DRAW, map_mesh)?;
 
             Ok(Self {
-                map_vao,
-                _map_vbo: map_vbo,
-                _map_ebo: map_ebo,
-                map_index_count,
+                head,
+                map,
                 shader,
             })
         }
@@ -119,7 +86,8 @@ impl Engine {
             // Use shader
             gl.use_program(Some(self.shader));
             gl.clear_color(0.1, 0.2, 0.3, 1.0);
-            gl.clear(gl::COLOR_BUFFER_BIT);
+            gl.clear_depth_f32(1.);
+            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
             // Set camera matrix
             gl.uniform_matrix_4_f32_slice(
@@ -135,8 +103,13 @@ impl Engine {
             );
 
             // Draw map
-            gl.bind_vertex_array(Some(self.map_vao));
-            gl.draw_elements(gl::TRIANGLES, self.map_index_count, gl::UNSIGNED_INT, 0);
+            gl.bind_vertex_array(Some(self.map.vao));
+            gl.draw_elements(gl::TRIANGLES, self.map.index_count, gl::UNSIGNED_INT, 0);
+            gl.bind_vertex_array(None);
+
+            // Draw head
+            gl.bind_vertex_array(Some(self.head.vao));
+            gl.draw_elements(gl::TRIANGLES, self.head.index_count, gl::UNSIGNED_INT, 0);
             gl.bind_vertex_array(None);
 
             Ok(())
@@ -229,5 +202,70 @@ fn compile_glsl_program(gl: &gl::Context, sources: &[(u32, &str)]) -> Result<gl:
 impl Vertex {
     pub fn new(pos: [f32; 3], color: [f32; 3]) -> Self {
         Self { pos, color }
+    }
+}
+
+fn set_vertex_attrib(gl: &gl::Context) {
+    unsafe {
+        // Set vertex attributes
+        gl.enable_vertex_attrib_array(0);
+        gl.vertex_attrib_pointer_f32(
+            0,
+            3,
+            gl::FLOAT,
+            false,
+            std::mem::size_of::<Vertex>() as i32,
+            0,
+        );
+
+        gl.enable_vertex_attrib_array(1);
+        gl.vertex_attrib_pointer_f32(
+            1,
+            3,
+            gl::FLOAT,
+            false,
+            std::mem::size_of::<Vertex>() as i32,
+            3 * std::mem::size_of::<f32>() as i32,
+        );
+    }
+}
+
+fn upload_mesh(gl: &gl::Context, usage: u32, mesh: &Mesh) -> Result<GpuMesh, String> {
+    unsafe {
+        // Map buffer
+        let vao = gl.create_vertex_array()?;
+        let vbo = gl.create_buffer()?;
+        let ebo = gl.create_buffer()?;
+
+        gl.bind_vertex_array(Some(vao));
+
+        // Write vertices
+        gl.bind_buffer(gl::ARRAY_BUFFER, Some(vbo));
+        gl.buffer_data_u8_slice(
+            gl::ARRAY_BUFFER,
+            bytemuck::cast_slice(&mesh.vertices),
+            usage,
+        );
+
+        // Write vertices
+        gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(ebo));
+        gl.buffer_data_u8_slice(
+            gl::ELEMENT_ARRAY_BUFFER,
+            bytemuck::cast_slice(&mesh.indices),
+            usage,
+        );
+
+        // Set vertex attributes
+        set_vertex_attrib(gl);
+
+        // Unbind vertex array
+        gl.bind_vertex_array(None);
+
+        Ok(GpuMesh {
+            vao,
+            vbo,
+            ebo,
+            index_count: mesh.indices.len() as i32,
+        })
     }
 }

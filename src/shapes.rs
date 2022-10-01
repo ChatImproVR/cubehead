@@ -13,7 +13,7 @@ pub fn big_quad_map(size: f32) -> Mesh {
 }
 
 pub fn rgb_cube(size: f32) -> Mesh {
-    // We do a little golfing
+    // We do a little geometry
 
     let mut indices = vec![];
     let mut vertices = vec![];
