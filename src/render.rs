@@ -83,11 +83,13 @@ impl Engine {
         //view: Head,
     ) -> Result<(), String> {
         unsafe {
-            // Use shader
-            gl.use_program(Some(self.shader));
+            // Clear depth and color buffers
             gl.clear_color(0.1, 0.2, 0.3, 1.0);
             gl.clear_depth_f32(1.);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+
+            // Use shader
+            gl.use_program(Some(self.shader));
 
             // Set camera matrix
             gl.uniform_matrix_4_f32_slice(
