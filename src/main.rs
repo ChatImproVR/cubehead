@@ -11,6 +11,8 @@ use nalgebra::{Matrix4, Quaternion, Unit, Vector3};
 
 mod desktop_camera;
 use desktop_camera::Camera;
+
+use crate::shapes::{big_quad_map, rgb_cube};
 mod render;
 mod shapes;
 
@@ -87,15 +89,13 @@ unsafe fn desktop_main() -> Result<()> {
         ],
     )?;
 
-    gl.use_program(Some(program));
-    gl.clear_color(0.1, 0.2, 0.3, 1.0);
-
     // We handle events differently between targets
-
     use glutin::event::{Event, WindowEvent};
     use glutin::event_loop::ControlFlow;
 
     let mut camera = Camera::default();
+    let mut engine = render::Engine::new(&gl, &big_quad_map(10.), &rgb_cube(0.25))
+        .map_err(|e| format_err!("Render engine failed to start; {}", e))?;
 
     let mut physical_size = PhysicalSize::new(0, 0);
 
@@ -109,22 +109,15 @@ unsafe fn desktop_main() -> Result<()> {
                 glutin_ctx.window().request_redraw();
             }
             Event::RedrawRequested(_) => {
-                gl.uniform_matrix_4_f32_slice(
-                    gl.get_uniform_location(program, "view").as_ref(),
-                    false,
-                    camera.view().as_slice(),
-                );
+                engine
+                    .frame(
+                        &gl,
+                        &[],
+                        camera.projection(physical_size.width as f32, physical_size.height as f32),
+                        camera.view(),
+                    )
+                    .expect("Engine error");
 
-                gl.uniform_matrix_4_f32_slice(
-                    gl.get_uniform_location(program, "proj").as_ref(),
-                    false,
-                    camera
-                        .projection(physical_size.width as f32, physical_size.height as f32)
-                        .as_slice(),
-                );
-
-                gl.clear(gl::COLOR_BUFFER_BIT);
-                gl.draw_arrays(gl::TRIANGLES, 0, 3);
                 glutin_ctx.swap_buffers().unwrap();
             }
             Event::WindowEvent { ref event, .. } => {

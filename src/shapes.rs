@@ -2,7 +2,7 @@ use crate::render::{Mesh, Vertex};
 
 pub fn big_quad_map(size: f32) -> Mesh {
     Mesh {
-        indices: vec![0, 1, 3, 0, 3, 2],
+        indices: vec![0, 1, 2, 0, 2, 3],
         vertices: vec![
             Vertex::new([-size, 0., -size], [1., 0., 0.]),
             Vertex::new([-size, 0., size], [0., 1., 0.]),

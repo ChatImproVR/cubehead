@@ -127,8 +127,8 @@ impl ArcBall {
 
 impl ArcBallController {
     pub fn pivot(&mut self, arcball: &mut ArcBall, delta_x: f32, delta_y: f32) {
-        arcball.yaw += delta_x * self.swivel_sensitivity;
-        arcball.pitch += delta_y * self.swivel_sensitivity;
+        arcball.yaw -= delta_x * self.swivel_sensitivity;
+        arcball.pitch -= delta_y * self.swivel_sensitivity;
 
         arcball.pitch = arcball.pitch.clamp(-FRAC_PI_2, FRAC_PI_2);
     }
