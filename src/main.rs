@@ -11,6 +11,8 @@ use nalgebra::{Matrix4, Quaternion, Unit, Vector3};
 
 mod desktop_camera;
 use desktop_camera::Camera;
+mod render;
+mod shapes;
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);

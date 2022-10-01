@@ -12,3 +12,4 @@ serde = { version = "1", features = ["derive"] }
 bincode = "1.3.3"
 glow = "0.11.2"
 glutin-openxr-opengl-helper = { git = "https://github.com/ChatImproVR/rust-opengl-openxr-example.git", branch = "library" }
+bytemuck = "1.12.1"

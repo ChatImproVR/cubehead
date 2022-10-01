@@ -8,6 +8,6 @@ pub struct Head {
     /// Position
     pub pos: Point3<f32>,
     /// Orientation
-    pub quat: UnitQuaternion<f32>,
+    pub orient: UnitQuaternion<f32>,
 }
 
