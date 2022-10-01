@@ -60,8 +60,10 @@ unsafe fn desktop_main() -> Result<()> {
 
     let mut physical_size = PhysicalSize::new(0, 0);
 
+    let mut time = std::time::Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::Poll;
         match event {
             Event::LoopDestroyed => {
                 return;
@@ -76,15 +78,18 @@ unsafe fn desktop_main() -> Result<()> {
                 let j = 500;
                 let heads: Vec<[[f32; 4]; 4]> = (0..j)
                     .map(|i| {
-                        let t = (i as f32 / j as f32) * 2. - 1.;
+                        let u = (i as f32 / j as f32) * 2. - 1.;
+
+                        let t = time.elapsed().as_secs_f32();
+
+                        let f = u * std::f32::consts::PI * 8.;
+
+                        let v = Vector3::new(2. / j as f32, -f.sin(), f.cos());
+                        let v = Unit::new_normalize(v);
 
                         cubehead::Head {
-                            orient: UnitQuaternion::identity(),
-                            pos: Point3::new(
-                                t * 8.,
-                                (t * std::f32::consts::PI * 8.).cos(),
-                                (t * std::f32::consts::PI * 8.).sin(),
-                            ),
+                            orient: UnitQuaternion::from_axis_angle(&v, t),
+                            pos: Point3::new(u * 8., f.cos(), f.sin()),
                         }
                     })
                     .map(|head| *head.matrix().as_ref())
