@@ -1,4 +1,7 @@
-use glutin::{event::{WindowEvent, ElementState, MouseButton, MouseScrollDelta}, dpi::PhysicalPosition};
+use glutin::{
+    dpi::PhysicalPosition,
+    event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
+};
 use nalgebra::{Matrix4, Point3, Vector3, Vector4};
 use std::f32::consts::FRAC_PI_2;
 
@@ -14,7 +17,6 @@ pub struct Camera {
     height: u32,
     left_is_clicked: bool,
     right_is_clicked: bool,
-
 }
 
 impl Camera {
@@ -49,7 +51,7 @@ impl Camera {
                 MouseButton::Left => {
                     self.left_is_clicked = *state == ElementState::Pressed;
                     true
-                },
+                }
                 MouseButton::Right => {
                     self.right_is_clicked = *state == ElementState::Pressed;
                     true
@@ -70,7 +72,7 @@ impl Camera {
                 self.height = size.height;
                 true
             }
-            _ => false
+            _ => false,
         }
     }
 }

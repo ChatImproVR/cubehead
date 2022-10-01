@@ -32,7 +32,7 @@ pub fn rgb_cube(size: f32) -> Mesh {
                 [sgn, size, -size],
             ];
 
-            let base = indices.len() as u32;
+            let base = vertices.len() as u32;
 
             for mut pos in square {
                 pos.rotate_right(i);
@@ -40,12 +40,12 @@ pub fn rgb_cube(size: f32) -> Mesh {
             }
 
             let offsets = if j == 0 {
-                [0, 1, 3, 0, 3, 2]
+                [0, 1, 2, 0, 2, 3]
             } else {
-                [0, 3, 1, 0, 2, 3]
+                [0, 2, 1, 0, 3, 2]
             };
 
-            indices.extend(&offsets.map(|i| i + base));
+            indices.extend(&offsets.map(|d| d + base));
         }
     }
 

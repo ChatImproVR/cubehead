@@ -94,7 +94,7 @@ unsafe fn desktop_main() -> Result<()> {
     use glutin::event_loop::ControlFlow;
 
     let mut camera = Camera::default();
-    let mut engine = render::Engine::new(&gl, &big_quad_map(10.), &rgb_cube(0.25))
+    let mut engine = render::Engine::new(&gl, &rgb_cube(0.25), &big_quad_map(10.))
         .map_err(|e| format_err!("Render engine failed to start; {}", e))?;
 
     let mut physical_size = PhysicalSize::new(0, 0);
