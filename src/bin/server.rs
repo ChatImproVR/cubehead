@@ -46,7 +46,7 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
         // Check for new connections
         for (stream, addr) in conn_rx.try_iter() {
             stream.set_nonblocking(true)?;
-            println!("{} connected", addr);
+            eprintln!("{} Connected", addr);
             conns.push(Connection {
                 last_pos: Head::default(),
                 msg_buf: AsyncBufferedReceiver::new(),
@@ -60,10 +60,12 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
         for mut conn in conns.drain(..) {
             match conn.msg_buf.read(&mut conn.stream)? {
                 ReadState::Disconnected => {
-                    println!("{} Disconnected", conn.addr);
+                    eprintln!("{} Disconnected", conn.addr);
                 }
                 ReadState::Complete(buf) => {
-                    std::io::stdout().lock().write(&buf).unwrap();
+                    let mut stdout = std::io::stdout().lock();
+                    stdout.write(&buf).unwrap();
+                    stdout.flush().unwrap();
                     live_conns.push(conn);
                 }
                 ReadState::Invalid | ReadState::Incomplete => {
