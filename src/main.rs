@@ -23,6 +23,8 @@ use shapes::{big_quad_map, rgb_cube};
 
 use clap::Parser;
 
+const VR_DEPTH_FORMAT: u32 =  gl::DEPTH_COMPONENT16;
+
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
 struct Args {
@@ -226,7 +228,7 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
     let depth_swapchain_format = xr_swapchain_formats
         .iter()
         .copied()
-        .find(|&f| f == glow::DEPTH_COMPONENT16)
+        .find(|&f| f == VR_DEPTH_FORMAT)
         .expect("No suitable depth format found");
 
     // Create color swapchain
@@ -629,7 +631,7 @@ fn get_vr_depth_texture(
         gl.tex_image_2d(
             gl::TEXTURE_2D,
             0,
-            gl::DEPTH_COMPONENT32 as _,
+            VR_DEPTH_FORMAT as _,
             width,
             height,
             0,
