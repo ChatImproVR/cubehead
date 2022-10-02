@@ -240,14 +240,17 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
     for &xr_view in &xr_views {
         let image_types = [(), ()];
 
+        let width = xr_view.recommended_image_rect_width;
+        let height = xr_view.recommended_image_rect_height;
+
         let xr_swapchain_create_info = xr::SwapchainCreateInfo::<xr::OpenGL> {
             create_flags: xr::SwapchainCreateFlags::EMPTY,
             usage_flags: xr::SwapchainUsageFlags::SAMPLED
                 | xr::SwapchainUsageFlags::COLOR_ATTACHMENT,
             format: color_swapchain_format,
             sample_count: xr_view.recommended_swapchain_sample_count,
-            width: xr_view.recommended_image_rect_width,
-            height: xr_view.recommended_image_rect_height,
+            width,
+            height,
             face_count: 1,
             array_size: 1,
             mip_count: 1,
@@ -270,8 +273,8 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
 
         let mut depth_images = vec![];
 
-        for &tex in &color_images {
-            depth_images.push(get_vr_depth_texture(&gl, tex).unwrap());
+        for _ in &color_images {
+            depth_images.push(get_vr_depth_texture(&gl, width as i32, height as i32).unwrap());
         }
 
         swapchain_depth_images.push(depth_images);
@@ -615,13 +618,10 @@ fn models() -> (Mesh, Mesh) {
 
 fn get_vr_depth_texture(
     gl: &gl::Context,
-    color_tex: gl::NativeTexture,
+    width: i32,
+    height: i32,
 ) -> Result<gl::NativeTexture, String> {
     unsafe {
-        gl.bind_texture(gl::TEXTURE_2D, Some(color_tex));
-        let width = gl.get_tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_WIDTH);
-        let height = gl.get_tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_HEIGHT);
-
         let depth_tex = gl.create_texture()?;
         gl.bind_texture(gl::TEXTURE_2D, Some(depth_tex));
         gl.tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
