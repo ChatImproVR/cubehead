@@ -223,20 +223,21 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
         .find(|&f| f == gl::SRGB8_ALPHA8)
         .unwrap_or(xr_swapchain_formats[0]);
 
-    /*
     let depth_swapchain_format = xr_swapchain_formats
-    .iter()
-    .copied()
-    .find(|&f| f == glow::DEPTH_COMPONENT16)
-    .expect("No suitable depth format found");
-    */
+        .iter()
+        .copied()
+        .find(|&f| f == glow::DEPTH_COMPONENT16)
+        .expect("No suitable depth format found");
 
     // Create color swapchain
-    let mut swapchain_images = vec![];
+    let mut swapchain_color_images = vec![];
+    let mut swapchain_depth_images = vec![];
     let mut xr_swapchains = vec![];
 
     // Set up swapchains and get images
     for &xr_view in &xr_views {
+        let image_types = [(), ()];
+
         let xr_swapchain_create_info = xr::SwapchainCreateInfo::<xr::OpenGL> {
             create_flags: xr::SwapchainCreateFlags::EMPTY,
             usage_flags: xr::SwapchainUsageFlags::SAMPLED
@@ -252,9 +253,27 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
 
         let xr_swapchain = xr_session.create_swapchain(&xr_swapchain_create_info)?;
 
-        let images = xr_swapchain.enumerate_images()?;
+        let color_images: Vec<gl::NativeTexture> = xr_swapchain
+            .enumerate_images()?
+            .into_iter()
+            .map(|tex| {
+                let tex = std::num::NonZeroU32::new(tex).unwrap();
 
-        swapchain_images.push(images);
+                /// Workaround for glow having not released https://github.com/grovesNL/glow/issues/210
+                pub struct NativeTextureFuckery(pub std::num::NonZeroU32);
+
+                std::mem::transmute(NativeTextureFuckery(tex))
+            })
+            .collect();
+
+        let mut depth_images = vec![];
+
+        for &tex in &color_images {
+            depth_images.push(get_vr_depth_texture(&gl, tex).unwrap());
+        }
+
+        swapchain_depth_images.push(depth_images);
+        swapchain_color_images.push(color_images);
         xr_swapchains.push(xr_swapchain);
     }
 
@@ -353,19 +372,22 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
             gl.scissor(0, 0, w, h);
 
             // Set the texture as the render target
-            let texture = swapchain_images[view_idx][xr_swapchain_img_idx as usize];
-            let texture = std::num::NonZeroU32::new(texture).unwrap();
-
-            /// Workaround for glow having not released https://github.com/grovesNL/glow/issues/210
-            pub struct NativeTextureFuckery(pub std::num::NonZeroU32);
-
-            let texture: glow::NativeTexture = std::mem::transmute(NativeTextureFuckery(texture));
+            let color_texture = swapchain_color_images[view_idx][xr_swapchain_img_idx as usize];
+            let depth_texture = swapchain_depth_images[view_idx][xr_swapchain_img_idx as usize];
 
             gl.framebuffer_texture_2d(
                 gl::FRAMEBUFFER,
                 gl::COLOR_ATTACHMENT0,
                 gl::TEXTURE_2D,
-                Some(texture),
+                Some(color_texture),
+                0,
+            );
+
+            gl.framebuffer_texture_2d(
+                gl::FRAMEBUFFER,
+                gl::DEPTH_ATTACHMENT,
+                gl::TEXTURE_2D,
+                Some(depth_texture),
                 0,
             );
 
@@ -586,4 +608,35 @@ fn head_matrices(heads: &[Head]) -> Vec<[[f32; 4]; 4]> {
 
 fn models() -> (Mesh, Mesh) {
     (big_quad_map(10.), rgb_cube(0.25))
+}
+
+fn get_vr_depth_texture(
+    gl: &gl::Context,
+    color_tex: gl::NativeTexture,
+) -> Result<gl::NativeTexture, String> {
+    unsafe {
+        gl.bind_texture(gl::TEXTURE_2D, Some(color_tex));
+        let width = gl.get_tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_WIDTH);
+        let height = gl.get_tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_HEIGHT);
+
+        let depth_tex = gl.create_texture()?;
+        gl.bind_texture(gl::TEXTURE_2D, Some(depth_tex));
+        gl.tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
+        gl.tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
+        gl.tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as _);
+        gl.tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as _);
+        gl.tex_image_2d(
+            gl::TEXTURE_2D,
+            0,
+            gl::DEPTH_COMPONENT32 as _,
+            width,
+            height,
+            0,
+            gl::DEPTH_COMPONENT,
+            gl::FLOAT,
+            None,
+        );
+
+        Ok(depth_tex)
+    }
 }
