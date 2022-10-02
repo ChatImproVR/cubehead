@@ -5,6 +5,7 @@ use std::net::{SocketAddr, TcpStream};
 
 use cubehead::{AsyncBufferedReceiver, Head, ReadState};
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
+use render::Mesh;
 use winit_input_helper::WinitInputHelper;
 use xr::opengl::SessionCreateInfo;
 
@@ -85,12 +86,13 @@ unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
     let mut camera = FlyCam::new(Point3::new(0., 4., 0.));
     let perspective_cfg = Perspective::default();
 
-    let mut engine = render::Engine::new(&gl, &big_quad_map(10.), &rgb_cube(0.25))
+    let (map_mesh, head_mesh) = models();
+    let mut engine = render::Engine::new(&gl, &map_mesh, &head_mesh)
         .map_err(|e| format_err!("Render engine failed to start; {}", e))?;
 
-    let mut proj = perspective_cfg.matrix(0., 0.);
-
     let mut client = Client::new(addr)?;
+
+    let mut proj = perspective_cfg.matrix(0., 0.);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -266,18 +268,16 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
     }
 
     // Compile shaders
-    let gl_program = todo!(); /*compile_glsl_program(
-                                  &gl,
-                                  &[
-                                      (gl::VERTEX_SHADER, VERTEX_SHADER_SOURCE),
-                                      (gl::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE),
-                                  ],
-                              )?;*/
-
     let xr_play_space =
         xr_session.create_reference_space(xr::ReferenceSpaceType::LOCAL, xr::Posef::IDENTITY)?;
 
     let mut xr_event_buf = xr::EventDataBuffer::default();
+
+    let (map_mesh, head_mesh) = models();
+    let mut engine = render::Engine::new(&gl, &map_mesh, &head_mesh)
+        .map_err(|e| format_err!("Render engine failed to start; {}", e))?;
+
+    let mut client = Client::new(addr)?;
 
     'main: loop {
         // Handle OpenXR Events
@@ -312,6 +312,11 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
         let frame_state = xr_frame_waiter.wait()?;
         dbg!(frame_state);
 
+        // Get head positions from server
+        let heads = client.update_heads().unwrap();
+        let head_mats = head_matrices(&heads);
+        engine.update_heads(&gl, &head_mats);
+
         // Get OpenXR Views
         // TODO: Do this as close to render-time as possible!!
         let (_xr_view_state_flags, xr_view_poses) = xr_session.locate_views(
@@ -322,6 +327,9 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
 
         // Signal to OpenXR that we are beginning graphics work
         xr_frame_stream.begin()?;
+
+        // Update head position in server
+        client.set_head_pos(&head_from_xr_pose(&xr_view_poses[0].pose));
 
         for view_idx in 0..xr_views.len() {
             // Acquire image
@@ -359,24 +367,11 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
             let headset_view = xr_view_poses[view_idx];
 
             let view = view_from_pose(&headset_view.pose);
-            gl.uniform_matrix_4_f32_slice(
-                gl.get_uniform_location(gl_program, "view").as_ref(),
-                false,
-                view.as_slice(),
-            );
-
             let proj = projection_from_fov(&headset_view.fov, 0., 1000.);
-            gl.uniform_matrix_4_f32_slice(
-                gl.get_uniform_location(gl_program, "proj").as_ref(),
-                false,
-                proj.as_slice(),
-            );
 
-            // Draw!
-            gl.use_program(Some(gl_program));
-            gl.clear_color(0.1, 0.2, 0.3, 1.0);
-            gl.clear(gl::COLOR_BUFFER_BIT);
-            gl.draw_arrays(gl::TRIANGLES, 0, 3);
+            engine
+                .frame(&gl, proj, view)
+                .expect("Engine error");
 
             // Unbind framebuffer
             gl.bind_framebuffer(gl::FRAMEBUFFER, None);
@@ -574,4 +569,8 @@ impl Client {
 
 fn head_matrices(heads: &[Head]) -> Vec<[[f32; 4]; 4]> {
     heads.iter().map(|head| *head.matrix().as_ref()).collect()
+}
+
+fn models() -> (Mesh, Mesh) {
+    (big_quad_map(10.), rgb_cube(0.25))
 }
