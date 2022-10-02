@@ -403,7 +403,7 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
             let headset_view = xr_view_poses[view_idx];
 
             let view = view_from_pose(&headset_view.pose);
-            let proj = projection_from_fov(&headset_view.fov, 0., 1000.);
+            let proj = projection_from_fov(&headset_view.fov, 0.01, 1000.);
 
             engine.frame(&gl, proj, view).expect("Engine error");
 
@@ -509,6 +509,9 @@ pub fn view_from_pose(pose: &xr::Posef) -> Matrix4<f32> {
 
 /// Creates a projection matrix for the given fov
 pub fn projection_from_fov(fov: &xr::Fovf, near: f32, far: f32) -> Matrix4<f32> {
+    // See https://gitlab.freedesktop.org/monado/demos/openxr-simple-example/-/blob/master/main.c 
+    // XrMatrix4x4f_CreateProjectionFov()
+
     let tan_left = fov.angle_left.tan();
     let tan_right = fov.angle_right.tan();
 
@@ -523,9 +526,10 @@ pub fn projection_from_fov(fov: &xr::Fovf, near: f32, far: f32) -> Matrix4<f32> 
 
     let a31 = (tan_right + tan_left) / tan_width;
     let a32 = (tan_up + tan_down) / tan_height;
-    let a33 = far / (far - near);
 
-    let a43 = (far * near) / (far - near);
+    let a33 = -far / (far - near);
+
+    let a43 = -(far * near) / (far - near);
 
     Matrix4::new(
         a11, 0.0, a31, 0.0, //
