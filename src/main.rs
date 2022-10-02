@@ -23,7 +23,7 @@ use shapes::{big_quad_map, rgb_cube};
 
 use clap::Parser;
 
-const VR_DEPTH_FORMAT: u32 =  gl::DEPTH_COMPONENT16;
+const VR_DEPTH_FORMAT: u32 =  gl::DEPTH_COMPONENT24;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -225,11 +225,13 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
         .find(|&f| f == gl::SRGB8_ALPHA8)
         .unwrap_or(xr_swapchain_formats[0]);
 
+    /*
     let depth_swapchain_format = xr_swapchain_formats
         .iter()
         .copied()
         .find(|&f| f == VR_DEPTH_FORMAT)
         .expect("No suitable depth format found");
+    */
 
     // Create color swapchain
     let mut swapchain_color_images = vec![];
@@ -521,7 +523,7 @@ pub fn projection_from_fov(fov: &xr::Fovf, near: f32, far: f32) -> Matrix4<f32> 
 
     let a31 = (tan_right + tan_left) / tan_width;
     let a32 = (tan_up + tan_down) / tan_height;
-    let a33 = -far / (far - near);
+    let a33 = far / (far - near);
 
     let a43 = (far * near) / (far - near);
 
@@ -636,7 +638,7 @@ fn get_vr_depth_texture(
             height,
             0,
             gl::DEPTH_COMPONENT,
-            gl::FLOAT,
+            gl::UNSIGNED_INT,
             None,
         );
 
