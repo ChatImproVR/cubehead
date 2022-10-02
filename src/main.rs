@@ -325,7 +325,7 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
         }
 
         // Get head positions from server
-        let heads = client.update_heads().unwrap();
+        let heads = client.update_heads()?;
         let head_mats = head_matrices(&heads);
         engine.update_heads(&gl, &head_mats);
 
@@ -567,10 +567,15 @@ impl Client {
 
     /// Receive head positions of all players
     fn poll(&mut self) -> Result<()> {
-        let res = self.msg_buf.read(&mut self.tcp_stream)?;
-        if let ReadState::Complete(msg) = res {
-            self.heads = bincode::deserialize(&msg)?;
+        let mut latest = None;
+        while let ReadState::Complete(msg) = self.msg_buf.read(&mut self.tcp_stream)? {
+            latest = Some(msg);
         }
+
+        if let Some(heads) = latest {
+            self.heads = bincode::deserialize(&heads)?;
+        }
+
         Ok(())
     }
 }
