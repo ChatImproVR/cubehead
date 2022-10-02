@@ -20,21 +20,43 @@ mod shapes;
 use camera::{FlyCam, Perspective};
 use shapes::{big_quad_map, rgb_cube};
 
-fn main() -> Result<()> {
-    let mut args = std::env::args();
-    let program_name = args.next().unwrap();
-    let addr: SocketAddr = args.next().expect("Requires addr").parse().unwrap();
-    let client_count: Option<usize> = args.next().map(|f| f.parse().unwrap());
+use clap::Parser;
 
-    if let Some(count) = client_count {
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+struct Args {
+    /// Use OpenXR instead of windowed mode
+    #[arg(long)]
+    vr: bool,
+
+    /// Spawn this many desktop clients
+    #[arg(short, long)]
+    clients: Option<usize>,
+
+    /// Connection address
+    #[arg()]
+    addr: SocketAddr,
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+
+    if let Some(count) = args.clients {
+        // Launch many desktop clients for testing
+        let program_name = std::env::args().next().unwrap();
         for _ in 0..count {
             std::process::Command::new(&program_name)
-                .arg(addr.to_string())
+                .arg(args.addr.to_string())
                 .spawn()?;
         }
     } else {
+        // Launch a single client
         unsafe {
-            desktop_main(addr)?;
+            if args.vr {
+                vr_main(args.addr)?;
+            } else {
+                desktop_main(args.addr)?;
+            }
         }
     }
 
@@ -113,7 +135,7 @@ unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
     });
 }
 
-unsafe fn vr_main() -> Result<()> {
+unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
     // Load OpenXR from platform-specific location
     #[cfg(target_os = "linux")]
     let entry = xr::Entry::load()?;
