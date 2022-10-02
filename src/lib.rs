@@ -64,15 +64,15 @@ impl AsyncBufferedReceiver {
                         return Ok(ReadState::Invalid);
                     }
                 }
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    return Ok(ReadState::Incomplete);
-                }
-                Err(ref e) if e.kind() == io::ErrorKind::BrokenPipe => {
-                    return Ok(ReadState::Disconnected);
-                }
-                Err(e) => {
-                    return Err(e);
-                }
+                Err(e) => match e.kind() {
+                    io::ErrorKind::WouldBlock => return Ok(ReadState::Incomplete),
+                    io::ErrorKind::BrokenPipe
+                    | io::ErrorKind::ConnectionReset
+                    | io::ErrorKind::ConnectionAborted => {
+                        return Ok(ReadState::Disconnected);
+                    }
+                    _ => return Err(e),
+                },
             };
         }
 
@@ -90,9 +90,13 @@ impl AsyncBufferedReceiver {
                     }
                 }
             }
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => Ok(ReadState::Incomplete),
-            Err(ref e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(ReadState::Disconnected),
-            Err(e) => Err(e),
+            Err(e) => match e.kind() {
+                io::ErrorKind::WouldBlock => Ok(ReadState::Incomplete),
+                io::ErrorKind::BrokenPipe
+                | io::ErrorKind::ConnectionReset
+                | io::ErrorKind::ConnectionAborted => Ok(ReadState::Disconnected),
+                _ => return Err(e),
+            },
         }
     }
 }

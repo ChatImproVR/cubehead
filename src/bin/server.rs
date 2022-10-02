@@ -55,7 +55,6 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
             });
         }
 
-
         let mut any_update = false;
 
         // Update head positions
@@ -87,11 +86,15 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
             for mut conn in conns_tmp.drain(..) {
                 match conn.stream.write_all(&msg) {
                     Ok(_) => conns.push(conn),
-                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => conns.push(conn),
-                    Err(e) if e.kind() == io::ErrorKind::BrokenPipe => {
-                        eprintln!("{} Disconnected", conn.addr)
-                    }
-                    Err(e) => Err(e)?,
+                    Err(e) => match e.kind() {
+                        io::ErrorKind::WouldBlock => conns.push(conn),
+                        io::ErrorKind::BrokenPipe
+                        | io::ErrorKind::ConnectionReset
+                        | io::ErrorKind::ConnectionAborted => {
+                            eprintln!("{} Disconnected", conn.addr);
+                        }
+                        _ => return Err(e),
+                    },
                 }
             }
         } else {
