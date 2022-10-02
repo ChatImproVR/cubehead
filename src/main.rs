@@ -13,21 +13,16 @@ use gl::HasContext;
 use glutin::dpi::PhysicalSize;
 use nalgebra::{Matrix4, Point3, Quaternion, Unit, UnitQuaternion, Vector3};
 
-mod desktop_camera;
-use desktop_camera::Camera;
-
-use crate::{
-    desktop_camera::Perspective,
-    flycam::FlyCam,
-    shapes::{big_quad_map, rgb_cube},
-};
-mod flycam;
+mod camera;
 mod render;
 mod shapes;
 
+use shapes::{big_quad_map, rgb_cube};
+use camera::{FlyCam, Perspective};
+
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
-    let use_vr = false;//args.next().is_some();
+    let use_vr = false; //args.next().is_some();
 
     unsafe {
         if use_vr {

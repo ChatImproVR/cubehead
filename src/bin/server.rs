@@ -96,7 +96,7 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
                 }
             }
         } else {
-            std::thread::sleep(Duration::from_millis(wait_time));
+            std::thread::sleep(Duration::from_micros(wait_time));
         }
     }
 }
