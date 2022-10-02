@@ -301,7 +301,7 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
                             dbg!(delta.state());
                             xr_session.begin(xr_view_type)?;
                         }
-                        _ => (),
+                        _ => continue 'main,
                     }
                 }
                 _ => (),
@@ -309,8 +309,20 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
         }
 
         // --- Wait for our turn to do head-pose dependent computation and render a frame
-        let frame_state = xr_frame_waiter.wait()?;
-        dbg!(frame_state);
+        let xr_frame_state = xr_frame_waiter.wait()?;
+
+        // Signal to OpenXR that we are beginning graphics work
+        xr_frame_stream.begin()?;
+
+        // Early exit
+        if !xr_frame_state.should_render {
+            xr_frame_stream.end(
+                xr_frame_state.predicted_display_time,
+                xr_environment_blend_mode,
+                &[],
+            )?;
+            continue;
+        }
 
         // Get head positions from server
         let heads = client.update_heads().unwrap();
@@ -321,15 +333,9 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
         // TODO: Do this as close to render-time as possible!!
         let (_xr_view_state_flags, xr_view_poses) = xr_session.locate_views(
             xr_view_type,
-            frame_state.predicted_display_time,
+            xr_frame_state.predicted_display_time,
             &xr_play_space,
         )?;
-
-        // Signal to OpenXR that we are beginning graphics work
-        xr_frame_stream.begin()?;
-
-        // Update head position in server
-        client.set_head_pos(&head_from_xr_pose(&xr_view_poses[0].pose));
 
         for view_idx in 0..xr_views.len() {
             // Acquire image
@@ -369,9 +375,7 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
             let view = view_from_pose(&headset_view.pose);
             let proj = projection_from_fov(&headset_view.fov, 0., 1000.);
 
-            engine
-                .frame(&gl, proj, view)
-                .expect("Engine error");
+            engine.frame(&gl, proj, view).expect("Engine error");
 
             // Unbind framebuffer
             gl.bind_framebuffer(gl::FRAMEBUFFER, None);
@@ -408,10 +412,14 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
             .views(&xr_projection_views);
 
         xr_frame_stream.end(
-            frame_state.predicted_display_time,
+            xr_frame_state.predicted_display_time,
             xr_environment_blend_mode,
             &[&layers],
         )?;
+
+        // Update head position in server. This is done after all the display work, so that we
+        // don't introduce latency
+        client.set_head_pos(&head_from_xr_pose(&xr_view_poses[0].pose))?;
     }
 
     Ok(())
