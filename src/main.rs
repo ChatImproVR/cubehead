@@ -71,6 +71,8 @@ unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
     let mut client = Client::new(addr)?;
 
     event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
+
         if wih.update(&event) {
             camera.update(&wih, 0.05, 2e-3);
             // Send head position to server
@@ -84,7 +86,10 @@ unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
             proj = perspective_cfg.matrix(ph.width as f32, ph.height as f32);
         }
 
-        *control_flow = ControlFlow::Poll;
+        let heads = client.update_heads().unwrap();
+        let head_mats = head_matrices(&heads);
+        engine.update_heads(&gl, &head_mats);
+
         match event {
             Event::LoopDestroyed => {
                 return;
@@ -93,10 +98,6 @@ unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
                 glutin_ctx.window().request_redraw();
             }
             Event::RedrawRequested(_) => {
-                let heads = client.update_heads().unwrap();
-                let head_mats = head_matrices(&heads);
-                engine.update_heads(&gl, &head_mats);
-
                 engine
                     .frame(&gl, proj, view_from_head(&camera.head()))
                     .expect("Engine error");
