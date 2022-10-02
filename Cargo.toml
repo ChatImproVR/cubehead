@@ -6,7 +6,6 @@ default-run = "cubehead"
 
 [dependencies]
 anyhow = "1"
-openxr = "0.16.0"
 glutin = "0.29.1"
 nalgebra = { version = "0.31.1", features = ["serde-serialize"] }
 serde = { version = "1", features = ["derive"] }
@@ -15,4 +14,10 @@ glow = "0.11.2"
 glutin-openxr-opengl-helper = { git = "https://github.com/ChatImproVR/rust-opengl-openxr-example.git", branch = "library" }
 bytemuck = "1.12.1"
 winit_input_helper = "0.13.0"
-clap = { version = "4.0.8", no-default-features = true, features = ["derive"] }
+clap = { version = "4.0.8", features = ["derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openxr = { version = "0.17.0", features = ["loaded"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+openxr = { version = "0.17.0", features = ["static"] }
