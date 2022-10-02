@@ -208,7 +208,7 @@ impl FlyCam {
         }
     }
 
-    pub fn update(&mut self, wih: &WinitInputHelper, speed: f32, sensitivity: f32) {
+    pub fn update(&mut self, wih: &WinitInputHelper, mut speed: f32, sensitivity: f32) {
         if wih.mouse_held(0) {
             let (x_delta, y_delta) = wih.mouse_diff();
             self.yaw += x_delta * sensitivity;

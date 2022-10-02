@@ -40,8 +40,7 @@ struct Connection {
 
 fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
     let mut conns: Vec<Connection> = vec![];
-
-    let mut wait_time = 1;
+    let mut conns_tmp = vec![];
 
     loop {
         // Check for new connections
@@ -56,7 +55,6 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
             });
         }
 
-        let mut live_conns = vec![];
 
         let mut any_update = false;
 
@@ -69,34 +67,36 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
                 ReadState::Complete(buf) => {
                     let new_head = bincode::deserialize(&buf).expect("Malformed message");
                     conn.last_pos = new_head;
-                    live_conns.push(conn);
+                    conns_tmp.push(conn);
                     any_update = true;
                 }
                 ReadState::Invalid | ReadState::Incomplete => {
-                    live_conns.push(conn);
+                    conns_tmp.push(conn);
                 }
             };
         }
 
-        conns = live_conns;
-
         if any_update {
             // Compile head position message
-            let heads: Vec<Head> = conns.iter().map(|c| c.last_pos).collect();
+            let heads: Vec<Head> = conns_tmp.iter().map(|c| c.last_pos).collect();
+            // TODO: Exclude the user's own head! Lmao
             let header = (bincode::serialized_size(&heads).unwrap() as u32).to_le_bytes();
             let mut msg = header.to_vec();
             bincode::serialize_into(&mut msg, &heads).unwrap();
 
-            for conn in &mut conns {
-                // TODO: Exclude the user's own head! Lmao
+            for mut conn in conns_tmp.drain(..) {
                 match conn.stream.write_all(&msg) {
-                    Ok(_) => (),
-                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => (),
+                    Ok(_) => conns.push(conn),
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => conns.push(conn),
+                    Err(e) if e.kind() == io::ErrorKind::BrokenPipe => {
+                        eprintln!("{} Disconnected", conn.addr)
+                    }
                     Err(e) => Err(e)?,
                 }
             }
         } else {
-            std::thread::sleep(Duration::from_micros(wait_time));
+            std::mem::swap(&mut conns, &mut conns_tmp);
+            std::thread::sleep(Duration::from_micros(1));
         }
     }
 }

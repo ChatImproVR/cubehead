@@ -21,23 +21,27 @@ use shapes::{big_quad_map, rgb_cube};
 use camera::{FlyCam, Perspective};
 
 fn main() -> Result<()> {
-    let mut args = std::env::args().skip(1);
-    let use_vr = false; //args.next().is_some();
+    let mut args = std::env::args();
+    let program_name = args.next().unwrap();
+    let addr: SocketAddr = args.next().expect("Requires addr").parse().unwrap();
+    let client_count: Option<usize> = args.next().map(|f| f.parse().unwrap());
 
-    unsafe {
-        if use_vr {
-            vr_main()?;
-        } else {
-            desktop_main()?;
+    if let Some(count) = client_count {
+        for _ in 0..count {
+            std::process::Command::new(&program_name)
+                .arg(addr.to_string())
+                .spawn()?;
+        }
+    } else {
+        unsafe {
+            desktop_main(addr)?;
         }
     }
 
     Ok(())
 }
 
-unsafe fn desktop_main() -> Result<()> {
-    let mut args = std::env::args().skip(1);
-    let addr: SocketAddr = args.next().expect("Requires addr").parse().unwrap();
+unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
     let mut tcp_stream = TcpStream::connect(addr)?;
     tcp_stream.set_nonblocking(true)?;
 

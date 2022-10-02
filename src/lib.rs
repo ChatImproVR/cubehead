@@ -67,6 +67,9 @@ impl AsyncBufferedReceiver {
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                     return Ok(ReadState::Incomplete);
                 }
+                Err(ref e) if e.kind() == io::ErrorKind::BrokenPipe => {
+                    return Ok(ReadState::Disconnected);
+                }
                 Err(e) => {
                     return Err(e);
                 }
@@ -88,6 +91,7 @@ impl AsyncBufferedReceiver {
                 }
             }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => Ok(ReadState::Incomplete),
+            Err(ref e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(ReadState::Disconnected),
             Err(e) => Err(e),
         }
     }
