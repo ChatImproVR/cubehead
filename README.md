@@ -11,6 +11,6 @@ For example, you might run the following commands in different terminals:
 
 ## TODO
 - [ ] VR support
-- [ ] Use UDP instead of TCP (faster!)
+- [ ] Use UDP or QUIC instead of TCP (faster!)
 - [ ] Better controls
 - [ ] More interesting map

@@ -3,7 +3,7 @@ extern crate openxr as xr;
 
 use std::net::{SocketAddr, TcpStream};
 
-use cubehead::Head;
+use cubehead::{AsyncBufferedReceiver, Head, ReadState};
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
 use winit_input_helper::WinitInputHelper;
 use xr::opengl::SessionCreateInfo;
@@ -17,8 +17,8 @@ mod camera;
 mod render;
 mod shapes;
 
-use shapes::{big_quad_map, rgb_cube};
 use camera::{FlyCam, Perspective};
+use shapes::{big_quad_map, rgb_cube};
 
 fn main() -> Result<()> {
     let mut args = std::env::args();
@@ -42,9 +42,6 @@ fn main() -> Result<()> {
 }
 
 unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
-    let mut tcp_stream = TcpStream::connect(addr)?;
-    tcp_stream.set_nonblocking(true)?;
-
     let event_loop = glutin::event_loop::EventLoop::new();
     let window_builder = glutin::window::WindowBuilder::new()
         .with_title("Hello triangle!")
@@ -71,20 +68,13 @@ unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
 
     let mut proj = perspective_cfg.matrix(0., 0.);
 
-    let mut msg_buf = cubehead::AsyncBufferedReceiver::new();
-
-    let mut heads: Vec<Head> = vec![];
+    let mut client = Client::new(addr)?;
 
     event_loop.run(move |event, _, control_flow| {
         if wih.update(&event) {
             camera.update(&wih, 0.05, 2e-3);
             // Send head position to server
-            cubehead::serialize_msg(&camera.head(), &mut tcp_stream).unwrap();
-        }
-
-        // Receive head positions of all players
-        if let cubehead::ReadState::Complete(msg) = msg_buf.read(&mut tcp_stream).unwrap() {
-            heads = bincode::deserialize(&msg).unwrap();
+            client.set_head_pos(&camera.head()).unwrap();
         }
 
         if let Some(ph) = wih.window_resized() {
@@ -103,10 +93,9 @@ unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
                 glutin_ctx.window().request_redraw();
             }
             Event::RedrawRequested(_) => {
-                let head_matrices: Vec<[[f32; 4]; 4]> =
-                    heads.iter().map(|head| *head.matrix().as_ref()).collect();
-
-                engine.update_heads(&gl, &head_matrices);
+                let heads = client.update_heads().unwrap();
+                let head_mats = head_matrices(&heads);
+                engine.update_heads(&gl, &head_mats);
 
                 engine
                     .frame(&gl, proj, view_from_head(&camera.head()))
@@ -516,4 +505,50 @@ pub fn view_from_head(head: &Head) -> Matrix4<f32> {
     let trans = Matrix4::new_translation(&-head.pos.coords);
 
     rotation * trans
+}
+
+struct Client {
+    tcp_stream: TcpStream,
+    msg_buf: AsyncBufferedReceiver,
+    heads: Vec<Head>,
+}
+
+impl Client {
+    /// Connect to server
+    pub fn new(addr: SocketAddr) -> Result<Self> {
+        let tcp_stream = TcpStream::connect(addr)?;
+        tcp_stream.set_nonblocking(true)?;
+        let msg_buf = AsyncBufferedReceiver::new();
+
+        Ok(Self {
+            tcp_stream,
+            heads: vec![],
+            msg_buf,
+        })
+    }
+
+    /// Send our own head position
+    pub fn set_head_pos(&mut self, head: &Head) -> Result<()> {
+        Ok(cubehead::serialize_msg(head, &mut self.tcp_stream)?)
+    }
+
+    /// Get latest head positions
+    pub fn update_heads(&mut self) -> Result<&[Head]> {
+        self.poll()?;
+
+        Ok(&self.heads)
+    }
+
+    /// Receive head positions of all players
+    fn poll(&mut self) -> Result<()> {
+        let res = self.msg_buf.read(&mut self.tcp_stream)?;
+        if let ReadState::Complete(msg) = res {
+            self.heads = bincode::deserialize(&msg)?;
+        }
+        Ok(())
+    }
+}
+
+fn head_matrices(heads: &[Head]) -> Vec<[[f32; 4]; 4]> {
+    heads.iter().map(|head| *head.matrix().as_ref()).collect()
 }
