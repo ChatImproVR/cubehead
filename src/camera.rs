@@ -233,6 +233,16 @@ impl FlyCam {
         if wih.key_held(VirtualKeyCode::D) {
             self.pos += tf_vect(Vector3::x());
         }
+
+        if wih.key_held(VirtualKeyCode::E) {
+            //self.pos += tf_vect(-Vector3::y());
+            self.pos += Vector3::y() * speed;
+        }
+
+        if wih.key_held(VirtualKeyCode::Q) {
+            //self.pos += tf_vect(Vector3::y());
+            self.pos += -Vector3::y() * speed;
+        }
     }
 
     pub fn head(&self) -> Head {
