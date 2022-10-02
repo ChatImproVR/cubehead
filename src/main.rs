@@ -372,8 +372,9 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
             gl.scissor(0, 0, w, h);
 
             // Set the texture as the render target
-            let color_texture = swapchain_color_images[view_idx][xr_swapchain_img_idx as usize];
-            let depth_texture = swapchain_depth_images[view_idx][xr_swapchain_img_idx as usize];
+            let img_idx = xr_swapchain_img_idx as usize;
+            let color_texture = swapchain_color_images[view_idx][img_idx];
+            let depth_texture = swapchain_depth_images[view_idx][img_idx];
 
             gl.framebuffer_texture_2d(
                 gl::FRAMEBUFFER,

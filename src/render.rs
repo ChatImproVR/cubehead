@@ -145,7 +145,7 @@ impl Engine {
             // Clear depth and color buffers
             gl.clear_color(0.1, 0.2, 0.3, 1.0);
             gl.clear_depth_f32(1.);
-            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            gl.clear(gl::COLOR_BUFFER_BIT | gl::STENCIL_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
             let set_camera_uniforms = |shader| {
                 // Set camera matrix
