@@ -23,7 +23,7 @@ use shapes::{big_quad_map, rgb_cube};
 
 use clap::Parser;
 
-const VR_DEPTH_FORMAT: u32 =  gl::DEPTH_COMPONENT24;
+const VR_DEPTH_FORMAT: u32 = gl::DEPTH_COMPONENT24;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -509,7 +509,7 @@ pub fn view_from_pose(pose: &xr::Posef) -> Matrix4<f32> {
 
 /// Creates a projection matrix for the given fov
 pub fn projection_from_fov(fov: &xr::Fovf, near: f32, far: f32) -> Matrix4<f32> {
-    // See https://gitlab.freedesktop.org/monado/demos/openxr-simple-example/-/blob/master/main.c 
+    // See https://gitlab.freedesktop.org/monado/demos/openxr-simple-example/-/blob/master/main.c
     // XrMatrix4x4f_CreateProjectionFov()
 
     let tan_left = fov.angle_left.tan();

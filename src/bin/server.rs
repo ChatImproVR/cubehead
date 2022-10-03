@@ -9,7 +9,7 @@ use cubehead::{AsyncBufferedReceiver, Head, ReadState};
 
 fn main() -> io::Result<()> {
     let mut args = std::env::args().skip(1);
-    let bind_addr = args.next().unwrap_or("127.0.0.1:5031".into());
+    let bind_addr = args.next().unwrap_or("0.0.0.0:5031".into());
     let bind_addr: SocketAddr = bind_addr.parse().expect("Failed to parse bind addr");
 
     // Create a new thread for the connection listener

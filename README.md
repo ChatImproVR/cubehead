@@ -10,7 +10,8 @@ For example, you might run the following commands in different terminals:
 * Client(s): `cargo run --release -- 127.0.0.1:5031`
 
 ## TODO
-- [ ] VR support
+- [x] VR support
 - [ ] Use UDP or QUIC instead of TCP (faster!)
-- [ ] Better controls
+- [x] Better controls
 - [ ] More interesting map
+- [ ] Even better controls
