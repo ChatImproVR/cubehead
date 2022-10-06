@@ -4,10 +4,11 @@ use std::{
     sync::mpsc::{self, Receiver, Sender},
     time::Duration,
 };
+use anyhow::Result;
 
-use cubehead::{AsyncBufferedReceiver, Head, ReadState};
+use cubehead::{AsyncBufferedReceiver, Head, ReadState, ServerState, ClientState, serialize_msg};
 
-fn main() -> io::Result<()> {
+fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let bind_addr = args.next().unwrap_or("0.0.0.0:5031".into());
     let bind_addr: SocketAddr = bind_addr.parse().expect("Failed to parse bind addr");
@@ -24,7 +25,7 @@ fn main() -> io::Result<()> {
 fn connection_listener(
     addr: SocketAddr,
     conn_tx: Sender<(TcpStream, SocketAddr)>,
-) -> io::Result<()> {
+) -> Result<()> {
     let listener = TcpListener::bind(addr)?;
     loop {
         conn_tx.send(listener.accept()?).unwrap();
@@ -32,13 +33,13 @@ fn connection_listener(
 }
 
 struct Connection {
-    last_pos: Head,
+    last_state: ClientState,
     stream: TcpStream,
     addr: SocketAddr,
     msg_buf: AsyncBufferedReceiver,
 }
 
-fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
+fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> Result<()> {
     let mut conns: Vec<Connection> = vec![];
     let mut conns_tmp = vec![];
 
@@ -48,7 +49,7 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
             stream.set_nonblocking(true)?;
             eprintln!("{} Connected", addr);
             conns.push(Connection {
-                last_pos: Head::default(),
+                last_state: ClientState::default(),
                 msg_buf: AsyncBufferedReceiver::new(),
                 stream,
                 addr,
@@ -64,8 +65,8 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
                     eprintln!("{} Disconnected", conn.addr);
                 }
                 ReadState::Complete(buf) => {
-                    let new_head = bincode::deserialize(&buf).expect("Malformed message");
-                    conn.last_pos = new_head;
+                    let new_state: ClientState = bincode::deserialize(&buf).expect("Malformed message");
+                    conn.last_state = new_state;
                     conns_tmp.push(conn);
                     any_update = true;
                 }
@@ -77,11 +78,14 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
 
         if any_update {
             // Compile head position message
-            let heads: Vec<Head> = conns_tmp.iter().map(|c| c.last_pos).collect();
+            let heads: Vec<Head> = conns_tmp.iter().map(|c| c.last_state.head).collect();
             // TODO: Exclude the user's own head! Lmao
-            let header = (bincode::serialized_size(&heads).unwrap() as u32).to_le_bytes();
-            let mut msg = header.to_vec();
-            bincode::serialize_into(&mut msg, &heads).unwrap();
+            let state = ServerState {
+                heads,
+            };
+
+            let mut msg = vec![];
+            serialize_msg(&state, &mut msg)?;
 
             for mut conn in conns_tmp.drain(..) {
                 match conn.stream.write_all(&msg) {
@@ -93,7 +97,7 @@ fn server(conn_rx: Receiver<(TcpStream, SocketAddr)>) -> io::Result<()> {
                         | io::ErrorKind::ConnectionAborted => {
                             eprintln!("{} Disconnected", conn.addr);
                         }
-                        _ => return Err(e),
+                        _ => return Err(e.into()),
                     },
                 }
             }

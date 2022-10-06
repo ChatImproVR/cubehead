@@ -2,6 +2,18 @@ use nalgebra::{Matrix4, Point3, UnitQuaternion};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
+/// Client data sent to server
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, Default)]
+pub struct ClientState {
+    pub head: Head,
+}
+
+/// Server data sent to client
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct ServerState {
+    pub heads: Vec<Head>,
+}
+
 /// The position and orientation of a user's head
 /// User's head points in the negative Z direction (following OpenGL NDC)
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, Default)]

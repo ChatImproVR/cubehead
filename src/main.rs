@@ -3,7 +3,7 @@ extern crate openxr as xr;
 
 use std::net::{SocketAddr, TcpStream};
 
-use cubehead::{AsyncBufferedReceiver, Head, ReadState};
+use cubehead::{AsyncBufferedReceiver, ClientState, Head, ReadState, ServerState};
 use glutin::{window::Window, ContextWrapper, PossiblyCurrent};
 use render::Mesh;
 use winit_input_helper::WinitInputHelper;
@@ -102,7 +102,10 @@ unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
         if wih.update(&event) {
             camera.update(&wih, 0.05, 2e-3);
             // Send head position to server
-            client.set_head_pos(&camera.head()).unwrap();
+            let state = ClientState {
+                head: camera.head(),
+            };
+            client.send_state(&state).unwrap();
         }
 
         if let Some(ph) = wih.window_resized() {
@@ -112,8 +115,8 @@ unsafe fn desktop_main(addr: SocketAddr) -> Result<()> {
             proj = perspective_cfg.matrix(ph.width as f32, ph.height as f32);
         }
 
-        let heads = client.update_heads().unwrap();
-        let head_mats = head_matrices(&heads);
+        let state = client.update_heads().unwrap();
+        let head_mats = head_matrices(&state.heads);
         engine.update_heads(&gl, &head_mats);
 
         match event {
@@ -351,8 +354,8 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
         }
 
         // Get head positions from server
-        let heads = client.update_heads()?;
-        let head_mats = head_matrices(&heads);
+        let state = client.update_heads()?;
+        let head_mats = head_matrices(&state.heads);
         engine.update_heads(&gl, &head_mats);
 
         // Get OpenXR Views
@@ -449,7 +452,10 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
 
         // Update head position in server. This is done after all the display work, so that we
         // don't introduce latency
-        client.set_head_pos(&head_from_xr_pose(&xr_view_poses[0].pose))?;
+        let state = ClientState {
+            head: head_from_xr_pose(&xr_view_poses[0].pose),
+        };
+        client.send_state(&state)?;
     }
 
     Ok(())
@@ -570,7 +576,7 @@ pub fn view_from_head(head: &Head) -> Matrix4<f32> {
 struct Client {
     tcp_stream: TcpStream,
     msg_buf: AsyncBufferedReceiver,
-    heads: Vec<Head>,
+    latest_state: ServerState,
 }
 
 impl Client {
@@ -582,21 +588,21 @@ impl Client {
 
         Ok(Self {
             tcp_stream,
-            heads: vec![],
+            latest_state: ServerState::default(),
             msg_buf,
         })
     }
 
     /// Send our own head position
-    pub fn set_head_pos(&mut self, head: &Head) -> Result<()> {
+    pub fn send_state(&mut self, head: &ClientState) -> Result<()> {
         Ok(cubehead::serialize_msg(head, &mut self.tcp_stream)?)
     }
 
     /// Get latest head positions
-    pub fn update_heads(&mut self) -> Result<&[Head]> {
+    pub fn update_heads(&mut self) -> Result<&ServerState> {
         self.poll()?;
 
-        Ok(&self.heads)
+        Ok(&self.latest_state)
     }
 
     /// Receive head positions of all players
@@ -606,8 +612,8 @@ impl Client {
             latest = Some(msg);
         }
 
-        if let Some(heads) = latest {
-            self.heads = bincode::deserialize(&heads)?;
+        if let Some(state) = latest {
+            self.latest_state = bincode::deserialize(&state)?;
         }
 
         Ok(())
