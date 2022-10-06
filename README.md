@@ -15,3 +15,4 @@ For example, you might run the following commands in different terminals:
 - [x] Better controls
 - [ ] More interesting map
 - [ ] Even better controls
+- [ ] Exclude own head pos from rendering
