@@ -17,4 +17,4 @@ For example, you might run the following commands in different terminals:
 - [ ] Even better controls
 - [ ] Exclude own head pos from rendering
 
-[[screenshot.png]]
+![cubehead](screenshot.png)
