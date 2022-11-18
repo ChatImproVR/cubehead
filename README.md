@@ -16,3 +16,5 @@ For example, you might run the following commands in different terminals:
 - [ ] More interesting map
 - [ ] Even better controls
 - [ ] Exclude own head pos from rendering
+
+[[screenshot.png]]
