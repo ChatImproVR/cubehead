@@ -12,6 +12,7 @@ fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let bind_addr = args.next().unwrap_or("0.0.0.0:5031".into());
     let bind_addr: SocketAddr = bind_addr.parse().expect("Failed to parse bind addr");
+    println!("Running on {}", bind_addr);
 
     // Create a new thread for the connection listener
     let (conn_tx, conn_rx) = mpsc::channel();
