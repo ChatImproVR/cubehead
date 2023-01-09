@@ -267,12 +267,7 @@ unsafe fn vr_main(addr: SocketAddr) -> Result<()> {
             .enumerate_images()?
             .into_iter()
             .map(|tex| {
-                let tex = std::num::NonZeroU32::new(tex).unwrap();
-
-                /// Workaround for glow having not released https://github.com/grovesNL/glow/issues/210
-                pub struct NativeTextureFuckery(pub std::num::NonZeroU32);
-
-                std::mem::transmute(NativeTextureFuckery(tex))
+                gl::Context::create_texture_from_gl_name(tex)
             })
             .collect();
 
